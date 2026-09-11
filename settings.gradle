@@ -1,0 +1,15 @@
+rootProject.name = 'chronovault'
+
+include 'adapter-sdk'
+include 'core'
+include 'cli'
+include 'adapters:generic'
+include 'adapters:maven'
+include 'adapters:gradle'
+include 'adapters:node'
+include 'adapters:python'
+
+include 'adapters:rust'
+include 'adapters:go'
+include 'adapters:dotnet'
+include 'adapters:cpp'

@@ -1,0 +1,44 @@
+apply plugin: 'application'
+
+dependencies {
+    implementation project(':core')
+    implementation project(':adapter-sdk')
+    implementation project(':adapters:generic')
+    implementation project(':adapters:maven')
+    implementation project(':adapters:gradle')
+    implementation project(':adapters:node')
+    implementation project(':adapters:python')
+    implementation project(':adapters:rust')
+    implementation project(':adapters:go')
+    implementation project(':adapters:dotnet')
+    implementation project(':adapters:cpp')
+    runtimeOnly 'org.slf4j:slf4j-nop:1.7.36'
+}
+
+application {
+    mainClass = 'dev.chronovault.cli.Main'
+    applicationName = 'chronovault'
+    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED',
+                                 '-Dfile.encoding=UTF-8']
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'dev.chronovault.cli.Main'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register('uberJar', Jar) {
+    archiveClassifier = 'all'
+    manifest {
+        attributes 'Main-Class': 'dev.chronovault.cli.Main'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}

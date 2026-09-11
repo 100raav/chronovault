@@ -1,0 +1,14 @@
+{
+  "name": "chrono-node-demo",
+  "version": "1.0.0",
+  "description": "CHRONOVAULT demo project — Node.js",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

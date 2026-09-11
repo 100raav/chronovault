@@ -1,0 +1,32 @@
+plugins {
+    id 'org.jetbrains.intellij' version '1.17.3'
+    id 'java'
+}
+
+group = 'dev.chronovault'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+intellij {
+    version = '2023.2.5'
+    type = 'IC'
+    plugins = []
+}
+
+patchPluginXml {
+    sinceBuild = '232'
+    untilBuild = '243.*'
+}
+
+runIde {
+    jvmArgs '-Dfile.encoding=UTF-8'
+}

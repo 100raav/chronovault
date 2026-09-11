@@ -1,0 +1,42 @@
+<idea-plugin>
+  <id>dev.chronovault.intellij</id>
+  <name>CHRONOVAULT</name>
+  <vendor>CHRONOVAULT contributors</vendor>
+  <version>1.0.0</version>
+  <description><![CDATA[
+    Return to the moment your code still worked. Snapshot, diagnose, and restore
+    verified project states from the IDE via the chronovault command-line tool.
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+  </extensions>
+
+  <actions>
+    <action id="chronovault.checkpoint"
+            class="dev.chronovault.intellij.ChronoVaultAction"
+            text="Checkpoint"
+            description="Create a verified checkpoint">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="chronovault.diagnose"
+            class="dev.chronovault.intellij.ChronoVaultAction"
+            text="What broke it?"
+            description="Diagnose the last state change">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="chronovault.restore"
+            class="dev.chronovault.intellij.ChronoVaultAction"
+            text="Restore last good state"
+            description="Restore to the last verified checkpoint">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+    <action id="chronovault.dashboard"
+            class="dev.chronovault.intellij.ChronoVaultAction"
+            text="Open dashboard"
+            description="Open the local CHRONOVAULT web dashboard">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>

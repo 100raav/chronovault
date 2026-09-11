@@ -1,0 +1,29 @@
+# Build
+build/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Vaults — never commit recovered state
+**/.chronovault/
+**/dist/
+sample-projects/node/.chronovault/
+sample-projects/python/.chronovault/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+out/
+.DS_Store
+
+# IntelliJ plugin build output
+intellij-plugin/build/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

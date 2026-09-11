@@ -1,0 +1,45 @@
+{
+  "name": "chronovault",
+  "displayName": "CHRONOVAULT",
+  "description": "Return to the moment your code still worked. Snapshot, diagnose, and restore verified project states.",
+  "version": "1.0.0",
+  "publisher": "chronovault",
+  "license": "MIT",
+  "engines": { "vscode": "^1.84.0" },
+  "categories": ["Other"],
+  "keywords": ["checkpoint", "restore", "rollback", "recovery", "snapshot", "vault"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "CHRONOVAULT",
+      "properties": {
+        "chronovault.cliPath": {
+          "type": "string",
+          "default": "chronovault",
+          "description": "Path to the chronovault CLI executable (default: on PATH)."
+        }
+      }
+    },
+    "commands": [
+      { "command": "chronovault.checkpoint", "title": "ChronoVault: Create checkpoint", "icon": "$(save)" },
+      { "command": "chronovault.restore", "title": "ChronoVault: Restore last good state", "icon": "$(history)" },
+      { "command": "chronovault.diagnose", "title": "ChronoVault: What broke it?", "icon": "$(debug-alt)" },
+      { "command": "chronovault.status", "title": "ChronoVault: Show protection status", "icon": "$(shield)" },
+      { "command": "chronovault.dashboard", "title": "ChronoVault: Open dashboard", "icon": "$(globe)" }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "chronovault.checkpoint" },
+        { "command": "chronovault.restore" },
+        { "command": "chronovault.diagnose" },
+        { "command": "chronovault.status" },
+        { "command": "chronovault.dashboard" }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "vsce package",
+    "lint": "node --check extension.js"
+  }
+}

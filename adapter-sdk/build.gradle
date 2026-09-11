@@ -1,0 +1,6 @@
+// adapter-sdk: The SPI (Service Provider Interface) for project adapters.
+// Adapters implement these interfaces to provide project detection and health checks.
+// No external dependencies. Pure Java interfaces and records.
+
+dependencies {
+}

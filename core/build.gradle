@@ -1,0 +1,13 @@
+// core: The heart of CHRONOVAULT.
+// Provides domain model, storage, snapshots, health engine, recovery, diff, etc.
+// Depends on adapter-sdk for project detection interfaces.
+
+dependencies {
+    implementation project(':adapter-sdk')
+    implementation 'org.xerial:sqlite-jdbc:3.46.1.0'
+    implementation 'com.google.code.gson:gson:2.11.0'
+}
+
+dependencies {
+    testImplementation project(':adapter-sdk')
+}
