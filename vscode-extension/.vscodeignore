@@ -1,4 +1,10 @@
 .vscode/**
-src/**
-*.map
+.github/**
 .gitignore
+README.md
+src/**
+**.vsix
+**.tgz
+**/*.map
+**/.DS_Store
+.git/**

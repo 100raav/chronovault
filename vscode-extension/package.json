@@ -1,13 +1,49 @@
 {
   "name": "chronovault",
   "displayName": "CHRONOVAULT",
-  "description": "Return to the moment your code still worked. Snapshot, diagnose, and restore verified project states.",
+  "description": "Return to the moment your code still worked. Record verified checkpoints, find what broke, and restore the last good state — with automatic rollback.",
   "version": "1.0.0",
   "publisher": "chronovault",
-  "license": "MIT",
-  "engines": { "vscode": "^1.84.0" },
-  "categories": ["Other"],
-  "keywords": ["checkpoint", "restore", "rollback", "recovery", "snapshot", "vault"],
+  "author": {
+    "name": "Saurav Kumar Bichha",
+    "url": "https://github.com/100raav"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/100raav/chronovault",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/100raav/chronovault.git"
+  },
+  "bugs": {
+    "url": "https://github.com/100raav/chronovault/issues"
+  },
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Other",
+    "Debuggers",
+    "Testing"
+  ],
+  "keywords": [
+    "checkpoint",
+    "restore",
+    "rollback",
+    "recovery",
+    "snapshot",
+    "vault",
+    "time-travel",
+    "diagnose",
+    "verified",
+    "local-first"
+  ],
+  "galleryBanner": {
+    "color": "#0a0f1e",
+    "theme": "dark"
+  },
+  "icon": "icon.png",
+  "readme": "readme.md",
+  "changelog": "CHANGELOG.md",
   "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
@@ -39,7 +75,8 @@
     }
   },
   "scripts": {
-    "package": "vsce package",
+    "package": "vsce package --no-dependencies --allow-missing-repository",
+    "publish": "vsce publish --no-dependencies --allow-missing-repository",
     "lint": "node --check extension.js"
   }
 }
