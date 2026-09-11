@@ -6,7 +6,7 @@
 
 **Return to the moment your code still worked.**
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-EULA-blue.svg)](EULA.md)
 [![Java](https://img.shields.io/badge/java-21+-orange.svg)](https://adoptium.net)
 [![Tests](https://img.shields.io/badge/tests-37%2F37-green.svg)](docs/DEVELOPMENT.md)
 [![Build](https://img.shields.io/badge/build-Gradle%208.14-blueviolet.svg)](build.gradle)
@@ -163,6 +163,8 @@ branding/         Logo and brand assets
 
 ## License
 
-[MIT](LICENSE) © 2026 [Saurav Kumar Bichha](https://github.com/100raav).
+[CHRONOVAULT EULA](EULA.md) © 2026 [Saurav Kumar Bichha](https://github.com/100raav).
 
-CHRONOVAULT is local-first by design: your code and history never leave your machine.
+By using CHRONOVAULT you agree to the End User License Agreement (see
+[EULA.md](EULA.md)). CHRONOVAULT is local-first by design: your code and history never
+leave your machine.
