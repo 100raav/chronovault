@@ -27,6 +27,12 @@
     environment variable to the full path of the binary.
   ]]></description>
   <change-notes><![CDATA[
+    <h3>1.0.1</h3>
+    <ul>
+      <li>CHRONOVAULT Tool Window for one-click access (checkpoint, health, diagnose, restore, dashboard).</li>
+      <li>Reliable CLI runtime discovery (PATH, user-scoped locations, macOS/Linux/Windows) with a clear message instead of a bare "not found".</li>
+      <li>All existing commands and recovery behavior unchanged.</li>
+    </ul>
     <h3>1.0.0</h3>
     <ul>
       <li>Verified checkpoints gated by real build/test health checks.</li>
@@ -41,32 +47,42 @@
 
   <extensions defaultExtensionNs="com.intellij">
     <notificationGroup id="CHRONOVAULT" displayType="BALLOON"/>
+    <toolWindow id="ChronoVault"
+                anchor="right"
+                icon="/icons/chronovault.svg"
+                factoryClass="dev.chronovault.intellij.ChronoVaultToolWindowFactory"/>
   </extensions>
 
   <actions>
-    <action id="chronovault.checkpoint"
-            class="dev.chronovault.intellij.ChronoVaultAction"
-            text="ChronoVault: Create Checkpoint"
-            description="Create a verified checkpoint">
+    <group id="chronovault.actions">
+      <action id="chronovault.checkpoint"
+              class="dev.chronovault.intellij.ChronoVaultAction"
+              text="Create Checkpoint"
+              description="Create a verified checkpoint"/>
+      <action id="chronovault.health"
+              class="dev.chronovault.intellij.ChronoVaultAction"
+              text="Verify Health"
+              description="Run the project's build/test verification"/>
+      <action id="chronovault.diagnose"
+              class="dev.chronovault.intellij.ChronoVaultAction"
+              text="What Broke It?"
+              description="Diagnose the last state change"/>
+      <action id="chronovault.restore"
+              class="dev.chronovault.intellij.ChronoVaultAction"
+              text="Restore Last Good State"
+              description="Restore to the last verified checkpoint"/>
+      <action id="chronovault.dashboard"
+              class="dev.chronovault.intellij.ChronoVaultAction"
+              text="Open Dashboard"
+              description="Open the local CHRONOVAULT web dashboard"/>
+    </group>
+    <group id="chronovault.tools">
+      <reference ref="chronovault.checkpoint"/>
+      <reference ref="chronovault.health"/>
+      <reference ref="chronovault.diagnose"/>
+      <reference ref="chronovault.restore"/>
+      <reference ref="chronovault.dashboard"/>
       <add-to-group group-id="ToolsMenu" anchor="last"/>
-    </action>
-    <action id="chronovault.diagnose"
-            class="dev.chronovault.intellij.ChronoVaultAction"
-            text="ChronoVault: What Broke It?"
-            description="Diagnose the last state change">
-      <add-to-group group-id="ToolsMenu" anchor="last"/>
-    </action>
-    <action id="chronovault.restore"
-            class="dev.chronovault.intellij.ChronoVaultAction"
-            text="ChronoVault: Restore Last Good State"
-            description="Restore to the last verified checkpoint">
-      <add-to-group group-id="ToolsMenu" anchor="last"/>
-    </action>
-    <action id="chronovault.dashboard"
-            class="dev.chronovault.intellij.ChronoVaultAction"
-            text="ChronoVault: Open Dashboard"
-            description="Open the local CHRONOVAULT web dashboard">
-      <add-to-group group-id="ToolsMenu" anchor="last"/>
-    </action>
+    </group>
   </actions>
 </idea-plugin>

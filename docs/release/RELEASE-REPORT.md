@@ -1,3 +1,78 @@
+# CHRONOVAULT 1.0.1 — TARGETED FIX REPORT
+
+Generated: 2026-09-12 — release policy: IDE integrations (VS Code + IntelliJ) bumped to
+1.0.1; the core product/CLI stays 1.0.0 (no core changes in this release). Status values
+use only `PASS`, `FAIL`, `NOT RUN`, `WARN`/`BLOCKED`. Nothing is presumed.
+
+## Environment
+
+| Item | Value |
+| --- | --- |
+| IDE integration version | 1.0.1 |
+| Core product / CLI version | 1.0.0 (unchanged, by design) |
+| Base commit | `588197a` |
+| Java | OpenJDK 21.0.2 LTS (Temurin) |
+| IntelliJ plugin wrapper | Gradle 9.7.1, IntelliJ Platform Gradle Plugin 2.18.1 |
+| Node | v22.7.0 |
+
+## VS Code extension — PASS
+
+- CLI runtime discovery rewritten (`cliResolver.js`) and covered by 10 Node tests: **10/10 PASS**
+  (`node resolver.test.js`). Resolution order verified: configured `chronovault.cliPath` →
+  bundled runtime → `PATH` → safe platform locations (macOS/Linux/Windows). No
+  developer-specific paths exist anywhere in the extension.
+- `extension.js` rewritten: resolver integration with runtime caching/invalidation,
+  multi-root workspace resolution, actionable "Configure CLI / Locate Runtime / Retry"
+  dialogs (10-minute cooldown), automatic sidebar + status-bar refresh after every
+  operation, and a `chronovault.health` command. Syntax verified with `node --check`.
+- `package.json` 1.0.1 with CHRONOVAULT **Activity Bar** + **Sidebar** view
+  (`chronovault.sidebar`), `onView:chronovault.sidebar` activation, and all six commands
+  contributed. Embedded manifest in packaged VSIX validated (version 1.0.1 present).
+- `dist/chronovault-1.0.1.vsix` packaged (11 files, 21.62 KB) with `resources/icon.svg`,
+  `icon.png`, `readme.md`, `CHANGELOG.md`.
+- **Install E2E (isolated profile): PASS** — installed into a fresh extensions dir; listed
+  as `chronovault.chronovault`; isolated GUI launch produced no extension exceptions in
+  renderer/extension-host logs. Visual click-through of the Activity Bar icon was not
+  performed headlessly (NOT RUN).
+
+## IntelliJ plugin — PASS
+
+- `ChronoVaultAction` now resolves the runtime platform-aware: `CHRONOVAULT_CLI` override →
+  `PATH` → safe platform locations (macOS/Linux/Windows), with a clear notification instead
+  of a bare "not found". No developer-specific paths.
+- Minimal native **CHRONOVAULT Tool Window** added (`ChronoVaultToolWindowFactory`) exposing
+  the existing actions (Create Checkpoint, Verify Health, What Broke It?, Restore Last Good,
+  Open Dashboard) — all run off the UI thread (background tasks / detached dashboard), so no
+  UI freeze.
+- `plugin.xml` 1.0.1: new `chronovault.actions` group, tool-window extension, 1.0.1
+  change-notes, tool-window icon resource.
+- `./gradlew clean buildPlugin` → `chronovault-intellij-1.0.1.zip` built.
+- **Plugin Verifier (fresh run): PASS** — `IC-232.10227.8: Compatible`,
+  `IC-243.22562.145: Compatible` (1.0.1).
+- GUI click-through of the Tool Window not performed headlessly (NOT RUN).
+
+## Core regression — PASS
+
+- `:core:test` re-run from clean: **48 tests / 0 failures / 0 errors / 0 skipped**.
+- CLI smoke of the exact commands the IDE buttons invoke (init → checkpoint → health →
+  diagnose → restore): real subprocess execution confirmed against a scratch git project;
+  no core code was modified in 1.0.1.
+
+## Signing / marketplace — NOT RUN / BLOCKED
+
+- IntelliJ signing: only a self-signed chain exists locally; a JetBrains-issued certificate
+  chain is still required (see `docs/PUBLISHING.md`). `signPlugin` NOT executed.
+- Marketplace publish steps are owner actions and are NOT run automatically.
+
+## Artifacts
+
+- `dist/chronovault-1.0.1.vsix`
+  sha256 `65be793d8a0bd8239940cd30cba33a1ab93f958c32519f167c0bb7965e67d6bb`
+- `dist/chronovault-intellij-1.0.1.zip`
+  sha256 `31da26cce0748dd3cd8f9f1ecc5f84546599c74834bfb8243d66bc788fd8e325`
+
+---
+
 # CHRONOVAULT 1.0.0 — Release Report
 
 Generated: 2026-09-12 — based on actual builds, tests, and inspections performed in this

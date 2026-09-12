@@ -110,10 +110,10 @@ Every command accepts `--json` for scripting.
 
 ## IDE integrations
 
-- **VS Code** — install `vscode-extension/chronovault-1.0.0.vsix` (Extensions → … →
+- **VS Code** — install `vscode-extension/chronovault-1.0.1.vsix` (Extensions → … →
   *Install from VSIX*), or [find it on the marketplace](docs/PUBLISHING.md).
 - **IntelliJ IDEA** — install
-  `intellij-plugin/build/distributions/chronovault-intellij-1.0.0.zip` (Settings →
+  `intellij-plugin/build/distributions/chronovault-intellij-1.0.1.zip` (Settings →
   Plugins → ⚙ → *Install Plugin from Disk*).
 
 Both are thin wrappers over the CLI; full instructions in

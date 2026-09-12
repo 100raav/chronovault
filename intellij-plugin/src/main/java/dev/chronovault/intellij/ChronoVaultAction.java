@@ -13,12 +13,14 @@ import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -27,22 +29,31 @@ public class ChronoVaultAction extends AnAction {
     private static final Logger LOG = Logger.getInstance(ChronoVaultAction.class);
     private static final int TIMEOUT_SECONDS = 600;
     private static final String GROUP_ID = "CHRONOVAULT";
+    private static final String CLI_NAME = "chronovault";
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         Project project = e.getProject();
         String basePath = project == null ? System.getProperty("user.dir") : project.getBasePath();
-        String cli = System.getenv().getOrDefault("CHRONOVAULT_CLI", "chronovault");
+        String cli = resolveCli();
 
         String command = switch (e.getActionManager().getId(this)) {
             case "chronovault.diagnose" -> "diagnose";
+            case "chronovault.health" -> "health";
             case "chronovault.restore" -> "restore --yes";
             case "chronovault.dashboard" -> "ui --open";
             default -> "checkpoint";
         };
 
+        if (cli == null) {
+            String msg = "CHRONOVAULT runtime could not be located. Set the CHRONOVAULT_CLI environment "
+                + "variable to the full path of the chronovault executable, or add it to PATH.";
+            notifyError(msg, project);
+            return;
+        }
+
         if ("ui --open".equals(command)) {
-            launchDashboard(cli, basePath);
+            launchDashboard(cli, basePath, project);
             return;
         }
 
@@ -62,7 +73,7 @@ public class ChronoVaultAction extends AnAction {
         });
     }
 
-    private void launchDashboard(String cli, String projectRoot) {
+    private void launchDashboard(String cli, String projectRoot, Project project) {
         try {
             ProcessBuilder pb = new ProcessBuilder(cli, "ui", "--open");
             if (projectRoot != null) pb.directory(new File(projectRoot));
@@ -75,13 +86,14 @@ public class ChronoVaultAction extends AnAction {
                 .createNotification("CHRONOVAULT", "Dashboard launched.", NotificationType.INFORMATION), null);
         } catch (Exception ex) {
             LOG.warn("chronovault ui failed", ex);
-            String msg = (ex instanceof java.io.IOException && System.getenv("CHRONOVAULT_CLI") == null)
-                ? "The 'chronovault' CLI was not found on PATH (use CHRONOVAULT_CLI)."
-                : "Dashboard launch failed: " + ex.getMessage();
-            Notifications.Bus.notify(NotificationGroupManager.getInstance()
-                .getNotificationGroup(GROUP_ID)
-                .createNotification("CHRONOVAULT", msg, NotificationType.ERROR), null);
+            notifyError("Dashboard launch failed: " + ex.getMessage(), project);
         }
+    }
+
+    private static void notifyError(String message, Project project) {
+        Notifications.Bus.notify(NotificationGroupManager.getInstance()
+            .getNotificationGroup(GROUP_ID)
+            .createNotification("CHRONOVAULT", message, NotificationType.ERROR), project);
     }
 
     private String execute(String cli, List<String> args, String projectRoot, ProgressIndicator indicator) {
@@ -112,9 +124,6 @@ public class ChronoVaultAction extends AnAction {
             }
             return out.toString();
         } catch (Exception ex) {
-            if (ex instanceof java.io.IOException && System.getenv("CHRONOVAULT_CLI") == null) {
-                return "The 'chronovault' CLI was not found on PATH (use CHRONOVAULT_CLI).";
-            }
             LOG.warn("chronovault failed", ex);
             return "chronovault failed: " + ex.getMessage();
         }
@@ -124,5 +133,81 @@ public class ChronoVaultAction extends AnAction {
         List<String> out = new ArrayList<>();
         for (String t : s.split("\\s+")) if (!t.isBlank()) out.add(t);
         return out;
+    }
+
+    /** Resolves the CLI: configured override, then PATH, then safe platform-specific locations. */
+    @Nullable
+    static String resolveCli() {
+        String override = System.getenv("CHRONOVAULT_CLI");
+        if (override != null && !override.isBlank()) {
+            File f = new File(trimQuotes(override));
+            if (isExecutable(f)) return f.getAbsolutePath();
+        }
+
+        String path = System.getenv("PATH");
+        if (path != null) {
+            for (String dir : path.split(File.pathSeparator)) {
+                if (dir.isEmpty()) continue;
+                for (String variant : exeVariants(CLI_NAME)) {
+                    File candidate = new File(dir, variant);
+                    if (isExecutable(candidate)) return candidate.getAbsolutePath();
+                }
+            }
+        }
+
+        for (String dir : safeLocations()) {
+            if (dir == null) continue;
+            for (String variant : exeVariants(CLI_NAME)) {
+                File candidate = new File(dir, variant);
+                if (isExecutable(candidate)) return candidate.getAbsolutePath();
+            }
+        }
+        return null;
+    }
+
+    private static String trimQuotes(String s) {
+        String t = s;
+        if (t.length() >= 2 && t.startsWith("\"") && t.endsWith("\"")) t = t.substring(1, t.length() - 1);
+        if (t.length() >= 2 && t.startsWith("'") && t.endsWith("'")) t = t.substring(1, t.length() - 1);
+        return t;
+    }
+
+    private static List<String> exeVariants(String name) {
+        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            return Arrays.asList(name + ".exe", name + ".cmd", name + ".bat", name);
+        }
+        return List.of(name);
+    }
+
+    private static List<String> safeLocations() {
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String home = System.getProperty("user.home");
+        List<String> dirs = new ArrayList<>();
+        if (home != null && !home.isBlank()) {
+            dirs.add(home + File.separator + ".chronovault" + File.separator + "bin");
+            dirs.add(home + File.separator + ".local" + File.separator + "bin");
+            if (!windows) dirs.add(home + File.separator + "bin");
+        }
+        if (windows) {
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData != null) dirs.add(localAppData + File.separator + "chronovault" + File.separator + "bin");
+            String programFiles = System.getenv("ProgramFiles");
+            if (programFiles != null) dirs.add(programFiles + File.separator + "Chronovault" + File.separator + "bin");
+        } else {
+            dirs.add("/usr/local/bin");
+            if (System.getProperty("os.name", "").toLowerCase().contains("mac")) dirs.add("/opt/homebrew/bin");
+            dirs.add("/opt/bin");
+        }
+        return dirs;
+    }
+
+    private static boolean isExecutable(File f) {
+        try {
+            if (f == null || !f.isFile() || !f.canRead()) return false;
+            String os = System.getProperty("os.name", "").toLowerCase();
+            return os.contains("win") || f.canExecute();
+        } catch (SecurityException se) {
+            return false;
+        }
     }
 }

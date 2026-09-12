@@ -3,6 +3,30 @@
 All notable changes to CHRONOVAULT are documented in this file. Dates are in
 `YYYY-MM-DD` format.
 
+## [1.0.1] — 2026-09-12
+
+### Fixed
+
+- **VS Code CLI discovery** — the extension now resolves the `chronovault` runtime
+  platform-aware (configured `cliPath` → bundled → `PATH` → safe user-scoped
+  locations on macOS/Linux/Windows) instead of requiring a bare `chronovault` on
+  `PATH`. No developer-specific paths.
+- **VS Code direct access** — CHRONOVAULT Activity Bar/sidebar with one-click
+  Checkpoint, Verify Health, What Broke It?, Restore, Status, and Dashboard; the
+  sidebar and status bar refresh automatically after every operation (no
+  Reload Window).
+- **VS Code actionable errors** — a missing runtime now shows
+  "CHRONOVAULT runtime could not be located" with **Configure CLI / Locate
+  Runtime / Retry** actions (rate-limited, so it never spams every startup).
+- **VS Code workspace resolution** — single-folder, active-editor, vault-marker,
+  and multi-root workspaces are handled; `process.cwd()` is never assumed.
+- **IntelliJ runtime discovery** — same class of fix: `CHRONOVAULT_CLI` override,
+  then `PATH`, then safe platform locations, with a clear message when missing.
+- **IntelliJ direct access** — minimal native CHRONOVAULT Tool Window exposing the
+  existing actions for one-click use; all commands still run off the UI thread.
+
+[1.0.1]: https://github.com/100raav/chronovault/releases/tag/v1.0.1
+
 ## [1.0.0] — 2026-09-12
 
 ### Added

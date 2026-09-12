@@ -10,7 +10,11 @@
 #
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="1.0.1"
+# Release policy: IDE integrations (VS Code + IntelliJ) bump on every release.
+# The core product/CLI version only bumps with a core change — it is pinned
+# here so the gate verifies the split instead of demanding identical versions.
+CLI_VER="1.0.0"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -54,11 +58,12 @@ HARD=$(git grep -n -I -E "$SECRET_RE" \
 if [[ -n "$HARD" ]]; then fail "secret material found:"; echo "$HARD"; else pass "secret scan of tracked source clean"; fi
 
 # --------------------------------------------------------------------------
-info "3. Version consistency ($VERSION)"
-for f in build.gradle intellij-plugin/build.gradle vscode-extension/package.json; do
+info "3. Version consistency (IDE integration $VERSION / core product $CLI_VER)"
+for f in intellij-plugin/build.gradle vscode-extension/package.json; do
   grep -q "$VERSION" "$f" && pass "$f -> $VERSION" || fail "$f version mismatch"
 done
-grep -q "$VERSION" cli/src/main/java/dev/chronovault/cli/Main.java && pass "CLI reports $VERSION" || fail "CLI version mismatch"
+grep -q "$CLI_VER" build.gradle && pass "root build.gradle -> $CLI_VER (core product)" || fail "root build.gradle core version mismatch"
+grep -q "$CLI_VER" cli/src/main/java/dev/chronovault/cli/Main.java && pass "CLI reports $CLI_VER (core product)" || fail "CLI version mismatch"
 grep -q "$VERSION" intellij-plugin/src/main/resources/META-INF/plugin.xml && pass "plugin.xml -> $VERSION" || fail "plugin.xml version missing"
 grep -q "\[$VERSION\]" CHANGELOG.md && pass "CHANGELOG -> $VERSION" || fail "CHANGELOG version missing"
 grep -q "$VERSION" docs/release/RELEASE-REPORT.md && pass "release report -> $VERSION" || fail "release report version missing"
@@ -114,7 +119,7 @@ if [[ "$SKIP_VERIFIER" == 1 ]]; then
 else
   ( cd intellij-plugin && ./gradlew verifyPlugin ) || { fail "verifyPlugin task failed"; VD_DEPS=1; }
   ALL_OK=1; VERIFIER_TARGETS=""
-  for v in "$VR"/IC-*/plugins/dev.chronovault/1.0.0/verification-verdict.txt; do
+  for v in "$VR"/IC-*/plugins/dev.chronovault/$VERSION/verification-verdict.txt; do
     if [[ -f "$v" ]]; then
       vd=$(cat "$v")
       IDE=$(basename "$(dirname "$(dirname "$(dirname "$(dirname "$v")")")")")
@@ -190,13 +195,13 @@ TMPJ="$(mktemp -t cvjar).jar"
 unzip -p "$DIST/chronovault-intellij-$VERSION.zip" "$IV_JAR_ZIP" > "$TMPJ"
 XML=$(unzip -p "$TMPJ" META-INF/plugin.xml 2>/dev/null || true)
 rm -f "$TMPJ"
-for pat in '<id>dev.chronovault</id>' '<version>1.0.0</version>' 'since-build="232"' 'until-build="251' '<vendor'; do
+for pat in '<id>dev.chronovault</id>' "<version>$VERSION</version>" 'since-build="232"' 'until-build="251' '<vendor'; do
   echo "$XML" | grep -q "$pat" || fail "patched plugin.xml missing: $pat"
 done
 pass "patched plugin.xml validated (id/version/idea-range/vendor)"
 # No secrets packaged in either artifact.
-if unzip -p "$DIST/chronovault-1.0.0.vsix" 2>/dev/null | grep -qiE "$SECRET_RE" \
-   || unzip -p "$DIST/chronovault-intellij-1.0.0.zip" 2>/dev/null | grep -qiE "$SECRET_RE"; then
+if unzip -p "$DIST/chronovault-$VERSION.vsix" 2>/dev/null | grep -qiE "$SECRET_RE" \
+   || unzip -p "$DIST/chronovault-intellij-$VERSION.zip" 2>/dev/null | grep -qiE "$SECRET_RE"; then
   fail "secret material packaged inside release artifact"
 else
   pass "release artifacts scan clean (vsix + intellij zip)"

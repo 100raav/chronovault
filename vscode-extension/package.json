@@ -2,7 +2,7 @@
   "name": "chronovault",
   "displayName": "CHRONOVAULT",
   "description": "Return to the moment your code still worked. Record verified checkpoints, find what broke, and restore the last good state — with automatic rollback.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "chronovault",
   "author": {
     "name": "Saurav Kumar Bichha",
@@ -44,34 +44,56 @@
   "changelog": "CHANGELOG.md",
   "activationEvents": [
     "onStartupFinished",
+    "onView:chronovault.sidebar",
     "onCommand:chronovault.checkpoint",
     "onCommand:chronovault.restore",
     "onCommand:chronovault.diagnose",
     "onCommand:chronovault.status",
+    "onCommand:chronovault.health",
     "onCommand:chronovault.dashboard"
   ],
   "main": "./extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "chronovault",
+          "title": "CHRONOVAULT",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "chronovault": [
+        { "id": "chronovault.sidebar", "name": "CHRONOVAULT" }
+      ]
+    },
     "configuration": {
       "title": "CHRONOVAULT",
       "properties": {
         "chronovault.cliPath": {
           "type": "string",
           "default": "chronovault",
-          "description": "Path to the chronovault CLI executable (default: on PATH)."
+          "description": "Path to the chronovault CLI executable (default: resolved from PATH, then bundled, then safe platform locations)."
         }
       }
     },
     "commands": [
       { "command": "chronovault.checkpoint", "title": "ChronoVault: Create checkpoint", "icon": "$(save)" },
+      { "command": "chronovault.health", "title": "ChronoVault: Verify health", "icon": "$(check)" },
       { "command": "chronovault.restore", "title": "ChronoVault: Restore last good state", "icon": "$(history)" },
       { "command": "chronovault.diagnose", "title": "ChronoVault: What broke it?", "icon": "$(debug-alt)" },
       { "command": "chronovault.status", "title": "ChronoVault: Show protection status", "icon": "$(shield)" },
       { "command": "chronovault.dashboard", "title": "ChronoVault: Open dashboard", "icon": "$(globe)" }
     ],
     "menus": {
+      "view/title": [
+        { "command": "chronovault.dashboard", "when": "view == chronovault.sidebar", "group": "navigation" },
+        { "command": "chronovault.status", "when": "view == chronovault.sidebar", "group": "navigation" }
+      ],
       "commandPalette": [
         { "command": "chronovault.checkpoint" },
+        { "command": "chronovault.health" },
         { "command": "chronovault.restore" },
         { "command": "chronovault.diagnose" },
         { "command": "chronovault.status" },
@@ -82,6 +104,7 @@
   "scripts": {
     "package": "vsce package --no-dependencies --allow-missing-repository",
     "publish": "vsce publish --no-dependencies --allow-missing-repository",
-    "lint": "node --check extension.js"
+    "test": "node resolver.test.js",
+    "lint": "node --check extension.js && node --check cliResolver.js"
   }
 }
