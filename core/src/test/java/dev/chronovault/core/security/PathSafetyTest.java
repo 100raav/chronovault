@@ -3,6 +3,7 @@ package dev.chronovault.core.security;
 import dev.chronovault.core.ChronoException;
 import dev.chronovault.core.util.PathSafety;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,6 +50,14 @@ class PathSafetyTest {
     void windowsStyleBackslashTraversalIsCaught() {
         assertTrue(PathSafety.containsEscapes("..\\evil"));
         assertTrue(PathSafety.containsEscapes("src\\..\\..\\escape"));
+    }
+
+    @Test
+    void projectRootItselfIsValidDirectoryTarget(@TempDir Path tempDir) throws Exception {
+        Path root = tempDir.resolve("project-root");
+        Files.createDirectories(root);
+
+        assertDoesNotThrow(() -> PathSafety.validateDirectory(root, root));
     }
 
     @Test

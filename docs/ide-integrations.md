@@ -15,7 +15,7 @@ Pure JavaScript, no build step. Load it via **Extensions → … → Install fro
 
 ### Capabilities
 
-- **Checkpoint** — `ChronoVault: Create checkout` command (runs the CLI in the opened
+- **Checkpoint** — `ChronoVault: Create checkpoint` command (runs the CLI in the opened
   workspace folder).
 - **Restore** — `ChronoVault: Restore last good state` command.
 - **Diagnose** — `ChronoVault: What broke it?` runs `chronovault diagnose` and surfaces
@@ -75,7 +75,7 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home \
   ./gradlew :core:test
 ```
 
-Expected result: **37 tests, 0 failures** (`BUILD SUCCESSFUL`).
+Expected result: **48 tests, 0 failures** (`BUILD SUCCESSFUL`).
 
 > Note: the system default JVM on this machine is Java 25. Always target the Temurin 21
 > JDK, either via `JAVA_HOME` or by letting Gradle resolve its toolchain automatically.

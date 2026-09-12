@@ -75,6 +75,14 @@ public final class PathSafety {
         } catch (NoSuchFileException e) {
             realRoot = canonicalRoot;
         }
+        // The project root itself is a valid directory target. Do not inspect
+        // its parent (root/..) as part of symlink-ancestor validation.
+        if (abs.equals(canonicalRoot)) return;
+
+        // The project root itself is a valid directory target. Do not inspect
+        // its parent (root/..) as part of symlink-ancestor validation.
+        if (abs.equals(canonicalRoot)) return;
+
         Path parent = abs.getParent();
         if (parent == null) return;
         Path cur = canonicalRoot;

@@ -126,6 +126,14 @@ function showRuntimeNeeded() {
       });
     } else if (choice === "Retry") {
       invalidateRuntime();
+      const runtime = resolveRuntime();
+      if (runtime.cli) {
+        vscode.window.showInformationMessage(
+          "CHRONOVAULT runtime ready: " + runtime.detail
+        );
+      } else {
+        showRuntimeNeeded();
+      }
     }
   });
 }
