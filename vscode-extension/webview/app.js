@@ -16,7 +16,7 @@
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ==================== STATE ==================== */
-  let state = { checkpoints: [], meta: {}, storage: {}, lastVerified: null, recoveries: [] };
+  let state = { checkpoints: [], meta: {}, storage: {}, config: {}, lastVerified: null, recoveries: [], diff: null };
   let selectedCp = null;
   let restoreTarget = null;
   let restorePlan = null;
@@ -29,9 +29,30 @@
   let revealOnNextRender = true;
   let connOk = false;
   let tooltipTimer = null;
+  let sseAlive = 0;
+  let diagLog = [];
+  let diagDone = false;
+  let diffData = null;
+  let diffPos = 0;
+  const MAX_DIFF_ROWS = 250;
   const WIZARD_STAGES = ["PLANNED", "PROTECTING", "PROTECTED", "RESTORING", "VERIFYING", "COMMITTING", "COMPLETED"];
   const WIZARD_ERR = ["ROLLING_BACK", "ROLLED_BACK", "FAILED"];
   const OPS_VERIFY = ["RUN_HEALTH", "health", "verifying", "VERIFYING"];
+
+  /* Directed state machine shown in map mode; edges are the machine's real,
+     directional transitions, never inferred causality. Nodes light up only
+     when their state is actually observed in the vault data. */
+  const MAP_STATES = [
+    { key: "VERIFIED", label: "VERIFIED", desc: "last healthy state" },
+    { key: "CODE_CHANGED", label: "CODE CHANGED", desc: "moved away from verified" },
+    { key: "HEALTH_FAILED", label: "HEALTH FAILED", desc: "verification failed" },
+    { key: "DIAGNOSED", label: "DIAGNOSED", desc: "causes triangulated" },
+    { key: "PROTECTED", label: "PROTECTED", desc: "protective snapshot taken" },
+    { key: "RESTORED", label: "RESTORED", desc: "target state recovered" }
+  ];
+  const MAP_EDGES = [
+    [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]
+  ];
 
   const STATUS_CLASS = s => String(s || "UNVERIFIED").toUpperCase();
 
@@ -54,10 +75,11 @@
 
   /* ==================== INIT ==================== */
   async function init() {
-    await Promise.all([loadMeta(), loadState(), loadCheckpoints(), loadHistory()]);
+    await Promise.all([loadMeta(), loadState(), loadConfig(), loadCheckpoints(), loadHistory()]);
     bind();
     startSSE();
     startClock();
+    startWatchdog();
     renderWorld();
     renderCheckpoints();
     populateDiffPickers();
@@ -69,7 +91,26 @@
     document.addEventListener("keydown", onKey);
   }
 
-  async function loadMeta() { try { state.meta = await api("/api/meta"); renderMeta(); } catch {} }
+  async function loadMeta() { try { state.meta = await api("/api/meta"); renderMeta(); } catch (e) { diag("loadMeta: " + e.message); } }
+  async function loadConfig() {
+    try {
+      state.config = await api("/api/config");
+      renderConfig();
+    } catch (e) { diag("loadConfig: " + e.message); }
+  }
+  function renderConfig() {
+    const c = state.config || {};
+    const name = c.adapter || "generic";
+    const build = c.buildCommand || (c.testCommand ? c.testCommand : "");
+    $("#adapterLine").textContent = name + (build ? " · " + build : "");
+    const r = $("#storeRetention");
+    if (r) r.textContent = "retention: " + (c.retention || "—") + (c.lastGc ? " · gc: " + c.lastGc : "");
+    const w = $("#welcome");
+    if (w) {
+      const det = w.querySelector(".welcome-detect");
+      if (det) det.textContent = "Detected: " + name + (build ? " — build: " + build : "");
+    }
+  }
   async function loadState() {
     try {
       const s = await api("/api/state");
@@ -77,10 +118,11 @@
       state.storage = s.storage;
       state.meta.project = s.project;
       state.meta.projectName = s.projectName;
+      if (s.recoveryCount != null) state.meta.recoveryCount = s.recoveryCount;
       renderMeta();
       renderStats();
       renderStorage();
-    } catch {}
+    } catch (e) { diag("loadState: " + e.message); }
   }
   async function loadCheckpoints(animate) {
     try {
@@ -94,10 +136,10 @@
       populateDiffPickers();
       updateWelcome();
       tickHealthRing();
-    } catch {}
+    } catch (e) { diag("loadCheckpoints: " + e.message); }
   }
   async function loadHistory() {
-    try { state.recoveries = await api("/api/history"); } catch { state.recoveries = state.recoveries || []; }
+    try { state.recoveries = await api("/api/history"); } catch (e) { state.recoveries = state.recoveries || []; diag("loadHistory: " + e.message); }
   }
   function markNewState(prev) {
     state.newIds = [];
@@ -107,12 +149,60 @@
     }
   }
 
+  /* ==================== DIAGNOSTICS / ERROR SCREEN ==================== */
+  function diag(msg) {
+    diagLog.push({ at: new Date().toISOString(), msg });
+    if (diagLog.length > 40) diagLog.shift();
+  }
+
+  function showErrorScreen(info) {
+    const ov = $("#cvError");
+    if (!ov) return;
+    const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v || "—"; };
+    set("evComponent", info.component);
+    set("evCause", info.cause);
+    set("evRuntime", info.runtime);
+    set("evSuggest", info.suggested);
+    ov.hidden = false;
+  }
+  function hideErrorScreen() { const ov = $("#cvError"); if (ov) ov.hidden = true; }
+
+  function runtimeInfo() {
+    const c = state.config || {};
+    const r = [window.location.protocol === "file:" ? "file://" : window.location.host];
+    if (c.adapter) r.push("adapter: " + c.adapter);
+    if (c.status) r.push("runtime: " + c.status);
+    if (c.cli && c.cli.version) r.push("cli: " + c.cli.version);
+    if (c.cli && c.cli.path) r.push(c.cli.path);
+    return r.join(" · ");
+  }
+
+  function openDiagnostics() {
+    const grid = $("#diagGrid");
+    const logs = $("#diagLogs");
+    if (!grid || !logs) return;
+    const rows = [
+      ["Dashboard version", document.querySelector("#version") ? $("#version").textContent : "?"],
+      ["Host", window.location.protocol === "file:" ? "file:// (local/IDE resource)" : window.location.host],
+      ["Runtime", runtimeInfo()],
+      ["Theme", document.documentElement.dataset.theme || "dark"],
+      ["Reduced motion", reducedMotion ? "yes" : "no"],
+      ["Checkpoints loaded", state.checkpoints.length],
+      ["Last verified", state.lastVerified ? new Date(state.lastVerified.createdAt).toISOString() : "none"],
+      ["SSE stream", evtSource ? (evtSource.readyState === evtSource.OPEN ? "open" : "reconnecting") : "off"],
+      ["Connections", connOk ? "connected" : "reconnecting…"]
+    ];
+    grid.innerHTML = rows.map(([k, v]) => `<div class="diag-grid-row"><dt>${esc(k)}</dt><dd>${esc(String(v))}</dd></div>`).join("");
+    logs.innerHTML = (diagLog.length ? diagLog.map(l => `<div class="diag-line"><span>${esc(l.at)}</span>${esc(l.msg)}</div>`).join("") : `<p class="muted">No diagnostics recorded.</p>`);
+    openModal("diagModal");
+  }
+
   function renderMeta() {
     const m = state.meta;
     $("#tagline").textContent = m.tagline || "Return to the moment your code still worked.";
     $("#projectName").textContent = m.projectName || "—";
     $("#projectPath").textContent = m.project || "—";
-    $("#version").textContent = m.version || "1.0.2";
+    $("#version").textContent = m.version || "1.0.3";
     $("#footProject").textContent = m.project || "";
   }
 
@@ -122,8 +212,12 @@
     $("#statSnapshots").textContent = s.snapshots ?? 0;
     $("#statObjects").textContent = s.objects ?? 0;
     $("#statPhys").textContent = BYTES(s.physicalBytes ?? 0);
-    $("#statLogical").textContent = BYTES(s.logicalBytes ?? 0);
-    const ratio = s.logicalBytes > 0 ? ((1 - s.physicalBytes / s.logicalBytes) * 100).toFixed(0) : 0;
+    $("#statProtected").textContent = s.protectedStates ?? 0;
+    const rec = state.meta.recoveryCount != null ? state.meta.recoveryCount : (s.recoveryHistory ?? 0);
+    $("#statRecovery").textContent = rec;
+    const logical = s.logicalBytes ?? 0;
+    const physical = s.physicalBytes ?? 0;
+    const ratio = logical > 0 ? ((1 - physical / logical) * 100).toFixed(0) : 0;
     $("#statDedup").textContent = ratio + "%";
     const lv = state.lastVerified;
     $("#lastVerified").textContent = lv ? TIME(lv.createdAt) + " · " + (lv.label || ID(lv.id).slice(-8)) : "none";
@@ -142,8 +236,10 @@
     if (!phys) return;
     phys.style.width = fill(physPct);
     sav.style.width = fill(physPct + savedPct);
-    $("#storePhysSize").textContent = BYTES(physical);
-    $("#storeLogicalSize").textContent = BYTES(logical);
+    const p = $("#storePhysicalSize");
+    const l = $("#storeLogicalSize");
+    if (p) p.textContent = BYTES(physical);
+    if (l) l.textContent = BYTES(logical);
   }
 
   function updateWelcome() {
@@ -193,12 +289,80 @@
   }
 
   function layout(i, n) {
-    if (viewMode === "map") {
-      const ang = i * 2.399;
-      const r = 18 + i * 4.6;
-      return { x: r * Math.cos(ang), y: BASE_H / 2 + r * Math.sin(ang) * 0.55 };
-    }
     return { x: 40 + i * CX, y: BASE_H / 2 };
+  }
+
+  /* ==================== MAP MODE (directed state machine) ==================== */
+  function mapRealized(cps) {
+    const sorted = sortedCps();
+    const lv = state.lastVerified;
+    const latest = sorted.length ? sorted[sorted.length - 1] : null;
+    const healthHistory = (state.recoveries || []);
+    const protectedSeen = healthHistory.some(r =>
+      (r.protectiveSnapshot && r.protectiveSnapshot.id) || r.progress && r.progress >= 1) ||
+      healthHistory.some(r => !!(r.targetCheckpoint));
+    const restored = healthHistory.some(r => r.stage === "COMPLETED");
+    const brokenSeen = cps.some(c => STATUS_CLASS(c.status) === "BROKEN");
+    const healthySeen = !!lv || cps.some(c => STATUS_CLASS(c.status) === "VERIFIED");
+    const moved = cps.length > 0 && (!lv || !(latest && lv.id && latest.id.value === lv.id.value && STATUS_CLASS(latest.status) === "VERIFIED"));
+    const notHealthy = cps.length > 0 && (!healthySeen || brokenSeen);
+    const flags = [healthySeen, moved, notHealthy, diagDone, protectedSeen, restored];
+    const onIdx = [];
+    for (let i = 0; i < flags.length; i++) if (flags[i]) onIdx.push(i);
+    const firstOn = onIdx.length ? onIdx[onIdx.length - 1] : -1;
+    return { onIdx, activeIdx: firstOn >= 0 && firstOn < MAP_STATES.length - 1 ? firstOn + 1 : -1 };
+  }
+
+  function renderMapWorld() {
+    const svg = $("#timelineSvg");
+    const world = $("#tlWorld");
+    if (!svg || !world) return;
+    const cps = sortedCps();
+    const vw = Math.max(viewportWidth(), 320);
+    const W = Math.max(vw / camera.zoom, 520);
+    const H = BASE_H + 26;
+    svg.setAttribute("height", H);
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    const cx = W / 2;
+    const cy = H / 2 + 4;
+    const rx = Math.min(W / 2 - 96, 300);
+    const ry = 42;
+    const n = MAP_STATES.length;
+    const realized = mapRealized(cps);
+    const anim = !reducedMotion;
+
+    let defs = `<marker id="mapArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="map-arrow"/></marker>`;
+    let edges = "";
+    for (const [a, b] of MAP_EDGES) {
+      const pa = { x: cx + rx * Math.cos(Math.PI / 2 + Math.PI * 2 * a / n), y: cy + ry * Math.sin(Math.PI / 2 + Math.PI * 2 * a / n) };
+      const pb = { x: cx + rx * Math.cos(Math.PI / 2 + Math.PI * 2 * b / n), y: cy + ry * Math.sin(Math.PI / 2 + Math.PI * 2 * b / n) };
+      const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+      const ox = my - cy, oy = cx - mx;
+      const len = Math.hypot(ox, oy) || 1;
+      const c = { x: mx + (ox / len) * 22, y: my + (oy / len) * 22 };
+      const active = realized.activeIdx === b && anim;
+      edges += `<path class="map-edge ${active ? "map-edge-active" : ""}" d="M${pa.x} ${pa.y} Q${c.x} ${c.y} ${pb.x} ${pb.y}" marker-end="url(#mapArrow)"/>`;
+    }
+
+    let nodes = "";
+    for (let i = 0; i < n; i++) {
+      const s = MAP_STATES[i];
+      const p = { x: cx + rx * Math.cos(Math.PI / 2 + Math.PI * 2 * i / n), y: cy + ry * Math.sin(Math.PI / 2 + Math.PI * 2 * i / n) };
+      const on = realized.onIdx.includes(i);
+      const activeNode = realized.activeIdx === i;
+      nodes += `<g class="map-node ${on ? "on" : "off"} ${activeNode ? "active" : ""}" data-status="${s.key}" transform="translate(${p.x} ${p.y})">`;
+      if (activeNode && anim) nodes += `<circle class="map-node-pulse" r="12"/>`;
+      nodes += `<circle class="map-node-ring" r="12"/>`;
+      nodes += `<circle class="map-node-core" r="4.5"/>`;
+      nodes += `</g>
+        <text class="map-label ${on ? "on" : "off"} ${activeNode ? "active" : ""}" x="${p.x}" y="${p.y + 30}" text-anchor="middle">${esc(s.label)}</text>
+        <text class="map-sub" x="${p.x}" y="${p.y + 42}" text-anchor="middle">${esc(s.desc)}</text>`;
+    }
+
+    world.innerHTML = defs + edges + nodes;
+    $("#tlGrid").innerHTML = "";
+    $("#tlCursor").hidden = true;
+    $("#timelineEmpty").hidden = true;
   }
 
   function fit() {
@@ -239,6 +403,11 @@
     const empty = $("#timelineEmpty");
     const world = $("#tlWorld");
     if (!svg || !world) return;
+    if (viewMode === "map") {
+      updateWelcome();
+      renderMapWorld();
+      return;
+    }
     const cps = sortedCps();
     if (!cps.length) {
       world.innerHTML = "";
@@ -428,6 +597,15 @@
     const checkList = (hr && hr.checks) || [];
     const passCount = checkList.filter(c => c.status === "PASS").length;
     const checks = checkList.map(c => `<span class="${c.status === "PASS" ? "ok" : "bad"}">${esc(c.name || "check")}</span>`).join("");
+    const checkDetails = checkList.map(c => `
+      <div class="insp-check" data-status="${esc(c.status)}">
+        <span class="insp-check-name">${esc(c.name || "check")} <span class="insp-check-status ${c.status === "PASS" ? "ok" : "bad"}">${esc(c.status)}</span></span>
+        ${c.exitCode != null ? `<span class="insp-check-meta">exit ${esc(c.exitCode)}</span>` : ""}
+        ${c.durationMs != null ? `<span class="insp-check-meta">${c.durationMs > 1000 ? (c.durationMs / 1000).toFixed(1) + "s" : c.durationMs + "ms"}</span>` : ""}
+        ${c.required ? `<span class="insp-check-meta">required</span>` : ""}
+        ${c.outputTail ? `<details class="insp-check-tail"><summary>output</summary><pre>${esc(c.outputTail)}</pre></details>` : ""}
+        ${c.errorTail ? `<details class="insp-check-tail"><summary>errors</summary><pre class="insp-check-err">${esc(c.errorTail)}</pre></details>` : ""}
+      </div>`).join("");
     const tools = (ev && ev.toolchain && ev.toolchain.tools) ? Object.entries(ev.toolchain.tools).map(([k, v]) =>
       `<div class="insp-row"><span>${esc(k)}</span><span class="insp-chip">${esc(String(v))}</span></div>`).join("") : `<div class="insp-row"><span>none recorded</span><span>—</span></div>`;
     const isRes = (state.recoveries || []).some(r => r.stage === "COMPLETED" && ((r.targetCheckpoint && r.targetCheckpoint.value) || r.targetCheckpoint) === cp.id.value);
@@ -450,6 +628,7 @@
           <div class="insp-row"><span>checks</span><span>${hr ? passCount + "/" + checkList.length : "—"}</span></div>
           <div class="insp-row"><span>duration</span><span>${hr ? (hr.totalDurationMs > 1000 ? (hr.totalDurationMs / 1000).toFixed(1) + "s" : hr.totalDurationMs + "ms") : "—"}</span></div>
           <div class="health-mini">${checks || ""}</div>
+          ${checkDetails ? `<details class="insp-checks"><summary>per-check detail</summary><div class="insp-check-list">${checkDetails}</div></details>` : ""}
         </div>
         <div class="insp-box"><h4>Toolchain fingerprint</h4>${tools}</div>
       </div>`;
@@ -514,18 +693,35 @@
     if (!from || !to) { toast("Select both checkpoints.", "warn"); return; }
     try {
       const d = await api(`/api/diff?from=${from}&to=${to}`);
-      const body = $("#diffBody");
-      const total = d.added + d.modified + d.deleted + d.renamed;
-      if (total === 0) { body.innerHTML = `<p class="muted">No changes between these checkpoints.</p>`; return; }
-      body.innerHTML = `
-        <div class="diff-summary">
-          <span class="diff-ADDED">+${d.added} added</span>
-          <span class="diff-MODIFIED">~${d.modified} modified</span>
-          <span class="diff-DELETED">-${d.deleted} deleted</span>
-          <span class="diff-RENAMED">↻${d.renamed} renamed</span>
-        </div>
-        ${(d.changes || []).map((c, i) => `<div class="diff-row" style="animation-delay:${Math.min(i * 12, 320)}ms"><span class="diff-kind diff-${c.kind}">${c.kind}</span><span>${esc(c.path)}</span></div>`).join("")}`;
-    } catch (e) { toast("Diff failed: " + e.message, "err"); }
+      diffData = d;
+      diffPos = 0;
+      renderDiff();
+    } catch (e) { toast("Diff failed: " + e.message, "err"); diag("runDiff: " + e.message); }
+  }
+
+  function renderDiff() {
+    const d = diffData;
+    const body = $("#diffBody");
+    if (!d || !body) return;
+    const changes = d.changes || [];
+    const total = d.added + d.modified + d.deleted + d.renamed;
+    if (total === 0) { body.innerHTML = `<p class="muted">No changes between these checkpoints.</p>`; return; }
+    const slice = changes.slice(diffPos, diffPos + MAX_DIFF_ROWS);
+    const more = diffPos + MAX_DIFF_ROWS < changes.length;
+    body.innerHTML = `
+      <div class="diff-summary">
+        <span class="diff-ADDED">+${d.added} added</span>
+        <span class="diff-MODIFIED">~${d.modified} modified</span>
+        <span class="diff-DELETED">-${d.deleted} deleted</span>
+        <span class="diff-RENAMED">↻${d.renamed} renamed</span>
+      </div>
+      <div class="diff-rows">
+        ${slice.map((c, i) => `<div class="diff-row" style="animation-delay:${Math.min(i * 12, 320)}ms"><span class="diff-kind diff-${c.kind}">${c.kind}</span><span>${esc(c.path)}</span></div>`).join("")}
+      </div>
+      ${more ? `<button class="btn diff-more" id="diffMore"><span class="btn-icon">+</span> Show ${Math.min(MAX_DIFF_ROWS, changes.length - diffPos - MAX_DIFF_ROWS)} more (${changes.length - diffPos - slice.length} left)</button>` : ""}
+      <p class="muted diff-foot">${changes.length} total change(s)${more ? " · " + (slice.length + diffPos) + " shown" : ""}</p>`;
+    const moreBtn = $("#diffMore");
+    if (moreBtn) moreBtn.addEventListener("click", () => { diffPos += MAX_DIFF_ROWS; renderDiff(); });
   }
 
   /* ==================== RESTORE (selective) ==================== */
@@ -736,22 +932,27 @@
   async function runDiagnose() {
     try {
       const d = await api("/api/diagnose");
+      diagDone = true;
       const panel = $("#diagnosisPanel");
       panel.hidden = false;
       const body = $("#diagnosisBody");
       const cards = d.cards || [];
+      const kindLabel = { FACT: "FACT", OBSERVATION: "OBSERVATION", HYPOTHESIS: "HYPOTHESIS" };
       body.innerHTML = `
-        <div style="padding:8px 16px;font-size:.72rem;color:var(--fg2)">
-          ${d.lastHealthyCheckpoint ? `Last verified: <strong>${esc((d.lastHealthyCheckpoint.value || d.lastHealthyCheckpoint)).slice(-8)}</strong> · ${TS(d.lastHealthyAt)} · ${d.changesSinceHealthy} change(s) since` : "No verified checkpoint found."}
+        <div class="diag-headline">
+          <span class="badge badge-${esc(d.healthy ? "VERIFIED" : "BROKEN")}">${d.healthy ? "HEALTHY" : "NOT HEALTHY"}</span>
+          <span class="diag-summary">${d.lastHealthyCheckpoint ? `Last verified <strong>${esc((d.lastHealthyCheckpoint.value || d.lastHealthyCheckpoint)).slice(-8)}</strong> · ${TS(d.lastHealthyAt)} · <strong>${d.changesSinceHealthy}</strong> change(s) since` : "No verified checkpoint found."}</span>
         </div>
-        <div class="card-list">${cards.map(c => `
-          <div class="card-item" data-sev="${esc(c.severity)}">
-            <div class="card-kind">${esc(c.kind)} · ${esc(c.severity)}</div>
+        ${cards.length ? `<div class="card-list">
+          ${cards.map(c => `
+          <div class="card-item" data-sev="${esc(c.severity)}" data-kind="${esc(c.kind)}">
+            <div class="card-kind"><span class="ev-kind ev-${esc(c.kind)}">${esc(kindLabel[c.kind] || c.kind)}</span><span class="ev-sev" data-sev="${esc(c.severity)}">${esc(c.severity)}</span></div>
             <div class="card-title">${esc(c.title)}</div>
             <div class="card-detail">${esc(c.detail || "")}</div>
-          </div>`).join("")}</div>`;
+          </div>`).join("")}
+        </div>` : `<p class="muted">No evidence recorded — run a health check first.</p>`}`;
       panel.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
-    } catch (e) { toast("Diagnosis failed: " + e.message, "err"); }
+    } catch (e) { toast("Diagnosis failed: " + e.message, "err"); diag("runDiagnose: " + e.message); }
   }
 
   /* ==================== SSE ==================== */
@@ -760,6 +961,8 @@
       evtSource = new EventSource("/api/events");
       evtSource.onmessage = e => {
         try {
+          sseAlive = Date.now();
+          setConn(true);
           const upd = JSON.parse(e.data);
           if (!upd.message || upd.message === ": keep-alive") return;
           appendOpLog(upd);
@@ -775,8 +978,25 @@
         } catch {}
       };
       evtSource.onerror = () => { setConn(false); };
-      evtSource.onopen = () => { setConn(true); };
-    } catch {}
+      evtSource.onopen = () => { sseAlive = Date.now(); setConn(true); };
+    } catch (e) { diag("startSSE: " + e.message); }
+  }
+  function tryRestartSSE() {
+    try { if (evtSource) evtSource.close(); } catch {}
+    evtSource = null;
+    if (window.cvBridge && window.cvBridge.reconnectSSE) { window.cvBridge.reconnectSSE(); return; }
+    startSSE();
+  }
+  function startWatchdog() {
+    setInterval(() => {
+      const stale = sseAlive > 0 && (Date.now() - sseAlive > 30000);
+      if (stale) {
+        diag("sse stale — refreshing");
+        setConn(false);
+        Promise.all([loadState(), loadCheckpoints(), loadHistory()]).catch(() => {});
+        tryRestartSSE();
+      }
+    }, 20000);
   }
   function setConn(ok) {
     connOk = ok;
@@ -1005,6 +1225,9 @@
     on("#wizardClose", closeWizard);
     on("#btnWelcomeVerify", runHealth);
     on("#btnWelcomeCheckpoint", runHealthAndCheckpoint);
+    on("#evRetry", () => { hideErrorScreen(); location.reload(); });
+    on("#evReload", () => location.reload());
+    on("#evDiagnostics", () => { hideErrorScreen(); openDiagnostics(); });
     const pi = $("#paletteInput");
     if (pi) {
       pi.addEventListener("input", e => renderPalette(e.target.value));
@@ -1025,10 +1248,32 @@
     applyThemeLocal,
     setTheme: applyTheme,
     refreshAll: () => Promise.all([loadState(), loadCheckpoints(true), loadHistory()]),
-    setHealthState
+    setHealthState,
+    reconnectSSE: () => { if (window.cvReconnectSSE) window.cvReconnectSSE(); }
   };
+  window.addEventListener("error", e => {
+    diag("uncaught: " + (e && e.message));
+    showErrorScreen({
+      component: "dashboard",
+      cause: (e && e.message) || "unknown error",
+      runtime: runtimeInfo(),
+      suggested: "Use Reload to rebuild the dashboard, or open Diagnostics for details."
+    });
+  });
+  window.addEventListener("unhandledrejection", e => {
+    diag("unhandled rejection: " + (e && e.reason && e.reason.message));
+  });
   if (window.__CV_READY__) window.__CV_READY__();
 
   loadTheme();
-  init().catch(console.error);
+  init().catch(e => {
+    diag("init: " + e.message);
+    showErrorScreen({
+      component: "init",
+      cause: (e && e.message) || "initialisation failed",
+      runtime: runtimeInfo(),
+      suggested: "Ensure the ChronoVault CLI is installed and this project is initialized, then Retry."
+    });
+    throw e;
+  });
 })();

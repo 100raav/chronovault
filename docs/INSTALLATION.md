@@ -36,14 +36,14 @@ install from source above.
 - **VS Code** — install the bundled VSIX:
 
   ```bash
-  code --install-extension vscode-extension/chronovault-1.0.2.vsix
+  code --install-extension vscode-extension/chronovault-1.0.3.vsix
   # or: Extensions view → ⋯ → Install from VSIX...
   ```
 
   Marketplace listing (after release): see [PUBLISHING.md](PUBLISHING.md).
 
 - **IntelliJ IDEA** — `Settings → Plugins → ⚙ → Install Plugin from Disk...`, pick
-  `intellij-plugin/build/distributions/chronovault-intellij-1.0.2.zip`.
+  `intellij-plugin/build/distributions/chronovault-intellij-1.0.3.zip`.
 
 Both plugins need the `chronovault` CLI on `PATH` (VS Code: override with
 `chronovault.cliPath`).

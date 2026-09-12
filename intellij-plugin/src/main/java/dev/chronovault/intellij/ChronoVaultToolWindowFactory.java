@@ -75,7 +75,7 @@ public class ChronoVaultToolWindowFactory implements ToolWindowFactory {
                         server.close();
                         return;
                     }
-                    JComponent body = tryBrowserPanel(server.port(), project, toolWindow);
+                    JComponent body = tryEmbedded(server, project, toolWindow);
                     wrapper.removeAll();
                     wrapper.add(body, BorderLayout.CENTER);
                     wrapper.revalidate();
@@ -93,33 +93,21 @@ public class ChronoVaultToolWindowFactory implements ToolWindowFactory {
         });
     }
 
-    private static JComponent tryBrowserPanel(int port, Project project, ToolWindow toolWindow) {
-        try {
-            return jcefBrowserPanel(port, project, toolWindow);
-        } catch (Throwable t) {
-            LOG.info("JCEF unavailable, using native dashboard fallback", t);
-            return nativeFallbackPanel(project, toolWindow,
-                "The embedded dashboard requires a JCEF-capable IDE.",
-                false);
-        }
-    }
-
-    /** JCEF browser that loads the ChronoVault dashboard served on loopback. */
-    private static JComponent jcefBrowserPanel(int port, Project project, ToolWindow toolWindow) throws Throwable {
-        // Class loaded reflectively/conditionally so callers outside JCEF IDEs aren't broken.
+    /** Prefer the embedded JCEF dashboard; fall back to the functional native panel. */
+    private static JComponent tryEmbedded(DashboardServer server, Project project, ToolWindow toolWindow) {
         ClassLoader cl = ChronoVaultToolWindowFactory.class.getClassLoader();
-        Class<?> browserClass = cl.loadClass("com.intellij.ui.jcef.JBCefBrowser");
-        Object browser = browserClass.getConstructor().newInstance();
-        java.lang.reflect.Method loadUrl = browserClass.getMethod("loadURL", String.class);
-        loadUrl.invoke(browser, "http://127.0.0.1:" + port + "/");
-
-        java.lang.reflect.Method getComponent = browserClass.getMethod("getComponent");
-        JComponent component = (JComponent) getComponent.invoke(browser);
-
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.add(component, BorderLayout.CENTER);
-        panel.add(browserBar(project, toolWindow, port), BorderLayout.SOUTH);
-        return panel;
+        if (JcefSupport.isSupported(cl)) {
+            try {
+                JComponent view = JcefSupport.createView(server.port(), project, project);
+                JPanel panel = new JPanel(new BorderLayout());
+                panel.add(view, BorderLayout.CENTER);
+                panel.add(browserBar(project, toolWindow, server.port()), BorderLayout.SOUTH);
+                return panel;
+            } catch (Throwable t) {
+                LOG.info("CHRONOVAULT JCEF unavailable, using native dashboard", t);
+            }
+        }
+        return new NativeDashboardPanel(server, project);
     }
 
     /** Native panel used when JCEF is unavailable, runtime missing, or server fails. */

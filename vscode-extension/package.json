@@ -2,7 +2,7 @@
   "name": "chronovault",
   "displayName": "CHRONOVAULT",
   "description": "Return to the moment your code still worked. Record verified checkpoints, find what broke, and restore the last good state — with automatic rollback.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "chronovault",
   "author": {
     "name": "Saurav Kumar Bichha",
@@ -45,7 +45,6 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:chronovault.sidebar",
-    "onView:chronovault.dashboardView",
     "onCommand:chronovault.checkpoint",
     "onCommand:chronovault.restore",
     "onCommand:chronovault.diagnose",
@@ -68,8 +67,7 @@
     },
     "views": {
       "chronovault": [
-        { "id": "chronovault.sidebar", "name": "CHRONOVAULT" },
-        { "id": "chronovault.dashboardView", "name": "Dashboard", "type": "webview" }
+        { "id": "chronovault.sidebar", "name": "CHRONOVAULT" }
       ]
     },
     "configuration": {
@@ -98,7 +96,7 @@
     "menus": {
       "view/title": [
         { "command": "chronovault.dashboard", "when": "view == chronovault.sidebar", "group": "navigation" },
-        { "command": "chronovault.refreshDashboard", "when": "view == chronovault.dashboardView", "group": "navigation" },
+        { "command": "chronovault.refreshDashboard", "when": "view == chronovault.sidebar", "group": "navigation" },
         { "command": "chronovault.status", "when": "view == chronovault.sidebar", "group": "navigation" }
       ],
       "commandPalette": [
@@ -120,7 +118,7 @@
     "package": "vsce package --no-dependencies --allow-missing-repository",
     "publish": "vsce publish --no-dependencies --allow-missing-repository",
     "sync-dashboard": "../scripts/sync-dashboard.sh",
-    "test": "node resolver.test.js && node dashboardServer.test.js && node dashboardView.test.js && node packageManifest.test.js",
-    "lint": "node --check extension.js && node --check cliResolver.js && node --check dashboardServer.js && node --check dashboardView.js && node --check webview/app.js && node --check webview/bridge.js && node --check webview/setup.js && node --check ../cli/src/main/resources/web/app.js"
+    "test": "node resolver.test.js && node dashboardServer.test.js && node packageManifest.test.js && node dashboardPanel.test.js && node commands.test.js",
+    "lint": "node --check extension.js && node --check cliResolver.js && node --check dashboardServer.js && node --check dashboardPanel.js && node --check webview/bridge.js && node --check webview/setup.js && node --check ../cli/src/main/resources/web/app.js && node ../scripts/check-html-sync.js"
   }
 }

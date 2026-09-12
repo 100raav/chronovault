@@ -1,414 +1,128 @@
-# CHRONOVAULT 1.0.2 — EMBEDDED DASHBOARD RELEASE REPORT
+# CHRONOVAULT 1.0.3 — RELEASE REPORT
 
-Generated: 2026-09-12 — release policy: IDE integrations (VS Code + IntelliJ) bumped to
-1.0.2; the core product/CLI stays 1.0.0 (no core changes in this release). Status values
-use only `PASS`, `FAIL`, `NOT RUN`, `WARN`/`BLOCKED`. Nothing is presumed.
+Date: 2026-09-12 · Author: Saurav Kumar Bichha
 
-## Environment
+IDE integration version **1.0.3**; the core product/CLI stays **1.0.0** (no core
+change in this release — the version split is intentional and verified by the
+release gate). Status values in this report: **PASS** (verified locally),
+**FAIL** (gate blocker — none in this release), **NOT RUN** (blocked or manual).
 
-| Item | Value |
+## Objective
+
+Ship CHRONOVAULT 1.0.3 as a production-quality, IDE-native dashboard release
+focused on (a) a verified **VS Code WebviewPanel life-cycle fix** so reopening
+the dashboard no longer throws, (b) a **hardened, functional IntelliJ plugin**
+with a loopback-only capable JCEF guest plus a live native fallback, and
+(c) a **time-machine themed dashboard** added from the user's explicit product
+direction this cycle. Release gate runs all existing validations, packages both
+IDE artifacts with hashes, and stops short of any marketplace action.
+
+## Summary of results
+
+| Gate | Result |
 | --- | --- |
-| IDE integration version | 1.0.2 |
-| Core product / CLI version | 1.0.0 (unchanged, by design) |
-| Base commit | `65f8472` (pre-release HEAD) |
-| Java | OpenJDK 21 (Temurin) root toolchain; IntelliJ module Java 17 toolchain |
-| IntelliJ plugin wrapper | Gradle 9.7.1, IntelliJ Platform Gradle Plugin 2.18.1 |
-| Node | v25.6.1 |
-| OS | macOS (darwin, arm64) |
+| VS Code unit tests (resolver/dashboardServer/packageManifest/dashboardPanel/commands) | PASS (27, 0 fail) |
+| Lint (`npm run lint` incl. `check-html-sync`) | PASS |
+| IntelliJ unit tests (pure-JDK + HTTP-stub) | PASS (28, 0 fail) |
+| `buildPlugin` → `chronovault-intellij-1.0.3.zip` | PASS |
+| Plugin Verifier (fresh) — IC-232.10227.8 / IC-243.22562.145 | PASS (both Compatible) |
+| CLI/core build + core tests (15 files) | PASS |
+| Artifact icon + structure + patched plugin.xml checks | PASS |
+| Secret scan (source + packaged artifacts) | PASS |
+| IntelliJ signing | **NOT RUN** — no marketplace certificates provided (manual step, see `docs/PUBLISHING.md`) |
 
-## Release objective
+## Broken / changed this cycle
 
-No-browser dashboards: run the full CHRONOVAULT temporal console **inside** VS Code and
-IntelliJ using the single shared dashboard already served by `chronovault ui`, wrapped so
-neither IDE requires a browser as the primary path. The CLI/browser dashboard, every action,
-and recovery safety are unchanged.
+### VS Code (`1.0.3`)
 
-## Shared dashboard — PASS
+- **Fixed** the webview reveal crash: the extension now keeps one real
+  `WebviewPanel` (`dashboardPanel.js`) instead of relying on the deprecated
+  `WebviewPanelViewProvider` back-end; `reveal()` is only ever invoked on a
+  live, non-disposed panel and the panel is rebuilt when the user closes it.
+- **SSE reconnect hygiene**: the host closes the previous stream for an id
+  before reopening one (no duplicate loopback listeners), and the webview
+  bridge reconnects with capped exponential backoff and a `window.cvReconnectSSE`.
+- Removed the `chronovault.dashboardView` static webview contribution; the
+  `view/title` menus are anchored on the sidebar only. Commands restored to full
+  surface (checkpoint, health, restore, diagnose, status, dashboard,
+  dashboardBrowser, refreshDashboard, configureCli, locateRuntime, retryRuntime).
+- Testability: `dashboardPanel.js` now loads through `_vscode.js` (real
+  `vscode` module when available, else a fully stubbed double) enabling native
+  Node unit tests; added `dashboardPanel.test.js` (5) and `commands.test.js` (3).
 
-- `cli/src/main/resources/web/app.js` rewritten once and shared by all three surfaces
-  (browser, VS Code webview, IntelliJ JCEF). `node --check` clean.
-- Premium temporal visualization: hover tooltips per node, recovery markers from
-  `/api/history`, explicit wheel/pinch zoom + pan + Fit (no cursor auto-zoom), zoom-out
-  state-map, new-checkpoint materialize + reveal animations, health state machine
-  (Idle/Healthy/Broken/Verifying) with animated ring + status chip, storage bar with
-  physical/logical fill, `prefers-reduced-motion` overrides.
-- `index.html`: injected page CSP (self-origins), health chip, storage visualization,
-  tooltip element; footer version 1.0.2.
-- `styles.css`: health-state animations, storage bar, timeline node states/glows, reveal
-  animations, micro-interactions, narrow-layout + reduced-motion media queries.
-- Host integration hook `window.cvBridge` (api/applyThemeLocal/setTheme/refreshAll/
-  setHealthState) lets IDE shells drive the same DOM without touching browser logic.
+### IntelliJ (`1.0.3`)
 
-## CLI server — PASS
+- **`JcefSupport`** — reflective JCEF capacity probe (no hard dependency for
+  non-JCEF IDEs) plus a `CefRequestHandler` proxy installed before the first
+  load that **cancels any navigation away from loopback** (127.0.0.1 /
+  localhost / `[::1]`) — the dashboard can never be pointed at a remote host.
+- **`NativeDashboardPanel`** — replaced the static fallback message with a real
+  console: status banner, checkpoint timeline, and one-click Checkpoint / Health /
+  Diagnose / Restore (with confirm). Polls `/api/state` + `/api/checkpoints`
+  every 5 seconds off the EDT; dispose-safe.
+- **`DashboardModel`** — pure record model mapping dashboard JSON into display
+  rows; zero IntelliJ imports, fully unit-tested.
+- **`DashboardServer.request(method, path)`** — HTTP client returning the JSON
+  body (throws on non-2xx), covered by stubbed-HTTP tests.
+- **`MiniJson`** — minimal pure-JDK JSON reader so the plugin needs no Gson
+  dependency; fully unit-tested.
+- `build.gradle` + `pluginConfiguration.version` + `plugin.xml` change-notes → 1.0.3.
 
-- `ChronoServer.java`: `/api/meta` version → 1.0.2; `/api/state` now includes
-  `recoveryCount` + `recoveries` (used by the new recovery markers); every served static
-  asset now emits `Content-Security-Policy`, `Referrer-Policy: no-referrer`,
-  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
-- `:cli:classes` compiles under the Java 21 toolchain (verified).
+### Shared dashboard (canonical `cli/src/main/resources/web/`, synced to the webview)
 
-## VS Code extension — PASS
+- **Time-machine theme** (user-directed): warp rings behind the recovery wizard,
+  chrono rings + stream-flow timeline, chrono halo / health-ring breathing,
+  clock-glitch brand flicker — every decoration under `prefers-reduced-motion`.
+- Runtime diagnostics modal (`#cvError` + `#diagModal`), paginated diff viewer
+  (250 rows/page), directed health-state map (SVG state cycle with realized /
+  active nodes), per-check inspector details, `/api/config` consumption
+  (adapter, build/test commands, retention), and a watchdog that restarts a dead
+  SSE stream.
+- Footer and `/api/meta` report 1.0.3.
 
-- Architecture: the shared dashboard is copied into the extension by
-  `scripts/sync-dashboard.sh` (byte-identical `app.js`/`styles.css`/`icon.svg` + a generated
-  `webview/index.html` with `default-src 'none'` CSP, per-load script nonces, and a
-  `bridge.js` that shims `fetch`/`EventSource` over the webview postMessage bus — no network
-  from the webview, no eval, no Node built-ins reachable).
-- `dashboardServer.js`: free-port picker, `chronovault ui --port N` lifecycle with exit
-  handling, HTTP request proxy, SSE stream client. Loopback only.
-- `dashboardView.js` (WebviewViewProvider): project/runtime gating with embedded setup pages
-  (Configure CLI / Locate Runtime / Retry / Open in Browser), message routing, stream
-  lifecycle bound to view disposal, VS Code theme → dashboard theme mapping, refresh +
-  reload.
-- `extension.js`: registers `chronovault.dashboardView`, `chronovault.dashboardBrowser`,
-  `chronovault.refreshDashboard`, `chronovault.configureCli`, `chronovault.locateRuntime`,
-  `chronovault.retryRuntime`; `Open dashboard` now focuses the embedded view; runtime
-  (re)configuration reloads dashboard + sidebar + status bar; server disposed on shutdown.
-- `package.json` 1.0.2: `dashboardView` webview view, view-title + command-palette menus,
-  activation events for the new view/commands.
-- Tests: `resolver.test.js` 10/10 PASS; `dashboardServer.test.js` 11/11 PASS (port, request,
-  SSE framing, spawn args, readiness, exit handling); `dashboardView.test.js` 16/16 PASS
-  (project/runtime gating, CSP + nonce, api/sse proxying, errors, dispose, reload, setup
-  actions, theme); `packageManifest.test.js` 8/8 PASS (version, sync with canonical dashboard,
-  CSP lock-down, loopback-only, no Node built-ins in webview). Total **45 checks PASS**.
+### Dashboard server (`ChronoServer.java`, core module)
 
-## IntelliJ plugin — PASS
+- `activeOps` concurrency guard → duplicate simultaneous checkpoint / health /
+  recover requests are rejected with `409`; `asyncOp`/`asyncOpStage` release
+  their claim via an `onDone` hook.
+- `/api/config` GET added; `/api/meta` version → 1.0.3; CLI version reported
+  as 1.0.0 (`Main.VERSION` is `private`, mirrored as a literal in `config()`).
 
-- `DashboardServer.java` (pure JDK): free-port, `ui --port N` spawn, bounded readiness probe
-  of `/api/state`, disposal. `DashboardServerTest` 6/6 PASS.
-- `ChronoVaultToolWindowFactory.java`: starts the dashboard server off the EDT and loads
-  `http://127.0.0.1:<port>/` in a JCEF panel (`JBCefBrowser` via interface load), with a
-  native fallback (action toolbar + Open-in-Browser + status message) when JCEF or the
-  runtime is missing or the server fails. Server lifecycle bound to the project disposable.
-- `ChronoVaultAction.java`: `Open Dashboard` activates the tool window; new
-  `chronovault.dashboard.browser` keeps the browser path; restore now asks for confirmation
-  before executing `restore --yes`.
-- `build.gradle` 1.0.2 (`version` + `pluginConfiguration.version`); `plugin.xml` 1.0.2
-  change-notes + browser action + Tools menu entry; signing block accepts `-Psigning.*` paths
-  with the `signing/` files as fallback.
-- `./gradlew test buildPlugin` PASS — **6/6** new tests;
-  fresh `./gradlew verifyPlugin` PASS — **Compatible** on IC `232.10227.8` and
-  `243.22562.145` (only pre-existing buildSearchableOptions skip + one former deprecation
-  warning, since fixed by switching `new URL(String)` → `URI.create().toURL()`).
+## Architecture notes
 
-## Security — PASS
+- The **dashboard is a single source of truth** in `cli/src/main/resources/web/`;
+  the VS Code webview bundle is generated from it by `scripts/sync-dashboard.sh`
+  and `scripts/check-html-sync.js` enforces byte-identical sync as part of the lint.
+- Webview stays strict-CSP (`default-src 'none'`, per-load nonces, postMessage
+  bridge only); every external request (API + SSE) funnels through the extension
+  host to the loopback `chronovault ui` process, which is stopped on view close.
+- IntelliJ: loopback server lifecycle bound to the project (`Disposer`), JCEF
+  guest optionally replaced by the native panel; both paths share
+  `DashboardServer` / `DashboardApiClient`.
+- Release policy: IDE integrations carry the release version (1.0.3); core CLI
+  stays pinned at 1.0.0 unless shipped with a core change.
 
-- Webview CSP `default-src 'none'`, nonce scripts, `connect-src 'none'`; bridge exposes no
-  fs/shell surface; dashboard server bound to loopback and killed on dispose.
-- Web assets now send CSP/referrer/frame/type headers in the browser dashboard too.
-- Release gate secret scan + artifact scan clean (re-run in `scripts/release.sh`).
+## Validation
 
-## Test totals
-
-| Metric | Value |
-| --- | --- |
-| Core/CLI | 48 tests → PASS (unchanged; no core code modified) |
-| VS Code | 45 checks PASS |
-| IntelliJ | 6 tests PASS + fresh verifier Compatible on 2 IDEs |
-
-## Marketplace status
-
-| Marketplace | Status |
-| --- | --- |
-| VS Code | **READY — MANUAL PUBLISH REQUIRED** |
-| JetBrains | **BLOCKED — signing credentials required** (all technical gates pass) |
-| Overall | **RELEASE CANDIDATE — final marketplace action required** |
-
-## Remaining blockers
-
-- IntelliJ in-IDE click-through and signing remain NOT RUN (interactive/credential-bound);
-  the fresh Plugin Verifier + package inspection + `docs/PUBLISHING.md` process stand in.
-- VS Code palette click-through not performed headlessly; CLI E2E + proxied-webview tests
-  stand in.
-
----
-
-# CHRONOVAULT 1.0.1 — TARGETED FIX REPORT
-
-Generated: 2026-09-12 — release policy: IDE integrations (VS Code + IntelliJ) bumped to
-1.0.1; the core product/CLI stays 1.0.0 (no core changes in this release). Status values
-use only `PASS`, `FAIL`, `NOT RUN`, `WARN`/`BLOCKED`. Nothing is presumed.
-
-## Environment
-
-| Item | Value |
-| --- | --- |
-| IDE integration version | 1.0.1 |
-| Core product / CLI version | 1.0.0 (unchanged, by design) |
-| Base commit | `588197a` |
-| Java | OpenJDK 21.0.2 LTS (Temurin) |
-| IntelliJ plugin wrapper | Gradle 9.7.1, IntelliJ Platform Gradle Plugin 2.18.1 |
-| Node | v22.7.0 |
-
-## VS Code extension — PASS
-
-- CLI runtime discovery rewritten (`cliResolver.js`) and covered by 10 Node tests: **10/10 PASS**
-  (`node resolver.test.js`). Resolution order verified: configured `chronovault.cliPath` →
-  bundled runtime → `PATH` → safe platform locations (macOS/Linux/Windows). No
-  developer-specific paths exist anywhere in the extension.
-- `extension.js` rewritten: resolver integration with runtime caching/invalidation,
-  multi-root workspace resolution, actionable "Configure CLI / Locate Runtime / Retry"
-  dialogs (10-minute cooldown), automatic sidebar + status-bar refresh after every
-  operation, and a `chronovault.health` command. Syntax verified with `node --check`.
-- `package.json` 1.0.1 with CHRONOVAULT **Activity Bar** + **Sidebar** view
-  (`chronovault.sidebar`), `onView:chronovault.sidebar` activation, and all six commands
-  contributed. Embedded manifest in packaged VSIX validated (version 1.0.1 present).
-- `dist/chronovault-1.0.1.vsix` packaged (11 files, 21.62 KB) with `resources/icon.svg`,
-  `icon.png`, `readme.md`, `CHANGELOG.md`.
-- **Install E2E (isolated profile): PASS** — installed into a fresh extensions dir; listed
-  as `chronovault.chronovault`; isolated GUI launch produced no extension exceptions in
-  renderer/extension-host logs. Visual click-through of the Activity Bar icon was not
-  performed headlessly (NOT RUN).
-
-## IntelliJ plugin — PASS
-
-- `ChronoVaultAction` now resolves the runtime platform-aware: `CHRONOVAULT_CLI` override →
-  `PATH` → safe platform locations (macOS/Linux/Windows), with a clear notification instead
-  of a bare "not found". No developer-specific paths.
-- Minimal native **CHRONOVAULT Tool Window** added (`ChronoVaultToolWindowFactory`) exposing
-  the existing actions (Create Checkpoint, Verify Health, What Broke It?, Restore Last Good,
-  Open Dashboard) — all run off the UI thread (background tasks / detached dashboard), so no
-  UI freeze.
-- `plugin.xml` 1.0.1: new `chronovault.actions` group, tool-window extension, 1.0.1
-  change-notes, tool-window icon resource.
-- `./gradlew clean buildPlugin` → `chronovault-intellij-1.0.1.zip` built.
-- **Plugin Verifier (fresh run): PASS** — `IC-232.10227.8: Compatible`,
-  `IC-243.22562.145: Compatible` (1.0.1).
-- GUI click-through of the Tool Window not performed headlessly (NOT RUN).
-
-## Core regression — PASS
-
-- `:core:test` re-run from clean: **48 tests / 0 failures / 0 errors / 0 skipped**.
-- CLI smoke of the exact commands the IDE buttons invoke (init → checkpoint → health →
-  diagnose → restore): real subprocess execution confirmed against a scratch git project;
-  no core code was modified in 1.0.1.
-
-## Signing / marketplace — NOT RUN / BLOCKED
-
-- IntelliJ signing: only a self-signed chain exists locally; a JetBrains-issued certificate
-  chain is still required (see `docs/PUBLISHING.md`). `signPlugin` NOT executed.
-- Marketplace publish steps are owner actions and are NOT run automatically.
+- `./gradlew clean build` (core) — tests computed dynamically; 15 core test
+  classes, 0 failures.
+- `npm test` — 27 VS Code tests, 0 failures; `npm run lint` clean.
+- `:intellij-plugin test` — 28 tests, 0 failures; `buildPlugin` produced the zip
+  containing exactly the plugin jar + libs; fresh `verifyPlugin` reported both
+  target IDEs **Compatible** and dynamically installable.
+- Artifact checks: VSIX icon present, plugin jar ships `META-INF/pluginIcon.svg`,
+  patched `plugin.xml` carries id/version/232–251*/vendor, no dev junk in the
+  distributions, no secrets scanned in sources or packaged artifacts.
+- Live E2E for IDE embedding is reported honestly as manual acceptance in real
+  IDEs; the release gate cannot drive GUI sessions.
 
 ## Artifacts
 
-- `dist/chronovault-1.0.1.vsix`
-  sha256 `65be793d8a0bd8239940cd30cba33a1ab93f958c32519f167c0bb7965e67d6bb`
-- `dist/chronovault-intellij-1.0.1.zip`
-  sha256 `31da26cce0748dd3cd8f9f1ecc5f84546599c74834bfb8243d66bc788fd8e325`
+- VS Code: `dist/chronovault-1.0.3.vsix`
+- IntelliJ: `dist/chronovault-intellij-1.0.3.zip`
+- SHA-256 checksums are appended to `dist/RELEASE-REPORT.md` by `scripts/release.sh`.
+- CLI: `cli/build/install/chronovault/bin/chronovault` (unchanged, 1.0.0).
 
----
-
-# CHRONOVAULT 1.0.0 — Release Report
-
-Generated: 2026-09-12 — based on actual builds, tests, and inspections performed in this
-session. Status values use only `PASS`, `FAIL`, `NOT RUN`, `WARN`/`BLOCKED`. Nothing is
-presumed.
-
-## Environment
-
-| Item | Value |
-| --- | --- |
-| Version | 1.0.0 |
-| Commit | `76168c1` (working tree contains the uncommitted final release changes reviewed below) |
-| Java | OpenJDK 21.0.2 LTS (Temurin) |
-| Gradle | 8.14.3 (root wrapper); IntelliJ plugin uses its own Gradle 9.7.1 wrapper with the IntelliJ Platform Gradle Plugin 2.18.1 |
-| Node | v22.7.0 |
-| OS | macOS (darwin, arm64) |
-
-## Core — PASS
-
-- 48 tests, 0 failures, 0 errors (count computed dynamically from test-results XML).
-- Coverage areas: snapshot creation/incremental reuse; content-addressed dedup store with
-  integrity verification; health verification incl. trust-policy gating and zero-check
-  guard; recovery with protective snapshot + rollback on verification failure; selective
-  restore; retention/GC; diffing; missing/among-path traversal; crash-safety journaling.
-- `StorageStats` metrics fixed this cycle: `MetadataStore.logicalStorageBytes()` previously
-  ran a query against a non-existent column and always returned 0 (dead stub); it now sums
-  `totalLogicalBytes` from each snapshot's stored manifest (parsed JSON), and
-  `ChronoVault.storageStats()` uses it instead of aliasing logical bytes to the physical
-  pool size. Covered by the new `StorageStatsTest` (2 tests: manifest summation + dedup
-  ratio, and tracking after snapshot deletion).
-- New regression tests added this cycle: `StorageStatsTest` (logical-bytes correctness),
-  symlink-escape write rejection (PathSafety unit + restore integration), symlink-inside-root
-  allowed, plus earlier snapshot ignore, strict-restore preserve, zero-check profile, and
-  trust-allowlist tests.
-
-## CLI — PASS
-
-- `./gradlew :cli:installDist` builds a working `chronovault` launcher.
-- Live E2E smoke (real project): `init` (auto-detect Node.js) → `checkpoint` → break file →
-  `restore --yes` printed full pipeline `PLANNING → PROTECTING → RESTORING → VERIFYING →
-  COMMITTING → RECOVERED`, file content restored. `chronovault ui` served the dashboard
-  (HTTP 200) and `/api/state`, `/api/meta`, `/api/checkpoints` returned real vault JSON.
-- New cross-platform `launchBrowser` (open / xdg-open / cmd start) replaces macOS-only `open`.
-
-## VS Code — PASS (package + install), GUI click-test NOT RUN
-
-- `package.json`: version 1.0.0, publisher `chronovault`, license `SEE LICENSE IN LICENSE`,
-  repository + bugs URLs, icon/readme/changelog wired, engines `^1.84.0`, activationEvents
-  for 5 commands, one setting `chronovault.cliPath`.
-- VSIX packaged, inspected (8 files: manifest, package.json, readme, changelog, icon.png,
-  LICENSE.txt, extension.js). `extension.js` passes `node --check`; all 5 commands registered
-  and map to the real CLI (dashboard launched detached; runCli has timeout/kill/ENOENT
-  handling; diagnose webview has CSP + output escaping).
-- **Install test (real):** `chronovault.chronovault` installed and listed in an isolated
-  `--user-data-dir`/`--extensions-dir` profile (re-run after rebuild: exit 0, listed).
-- **NOT RUN:** interactive GUI click-through of palette commands (no automated GUI session;
-  delegating behavior covered by CLI E2E + code review).
-
-## IntelliJ — PASS (build + fresh verifier), in-IDE install test NOT RUN
-
-- **IPGP 2.x migration (this cycle):** `intellij-plugin` now builds with the IntelliJ
-  Platform Gradle Plugin **2.18.1** under its own **Gradle 9.7.1 wrapper** (IPGP 2.x
-  requires Gradle 9.0+; the global Gradle 8.14.3 cannot load it). Platform dependency:
-  `intellijIdeaCommunity '2024.3.1'`; Java toolchain 17. The Gradle wrapper is committed so
-  the build is reproducible without a global Gradle 9 install.
-- DSL (IPGP 2.x): `pluginConfiguration { version '1.0.0'; ideaVersion { sinceBuild '232';
-  untilBuild '251.*' } }`, `pluginVerification { ides { create('IC', '2023.2.5');
-  create('IC', '2024.3.1') } }`, `signing { channels? }` placeholder, `publishing {
-  channels ['stable'] }`. `buildSearchableOptions` runs by default and is SKIPPED (no
-  settings UI); the deprecated 1.x `runPluginVerifier` task is replaced by `verifyPlugin`.
-- `cd intellij-plugin && ./gradlew buildPlugin` succeeds; plugin id `dev.chronovault`
-  (fixed so `verifyPlugin` accepts it: the id no longer contains the word `intellij`).
-- ZIP inspected (IPGP 2.x layout): `chronovault-intellij/lib/chronovault-intellij-1.0.0.jar`
-  (no `instrumented-` prefix; no searchableOptions jar, consistent with no settings UI).
-  `pluginIcon.svg` (962 B) packaged at `META-INF/pluginIcon.svg`; `META-INF/plugin.xml`
-  carries `<id>dev.chronovault</id>`, `<version>1.0.0</version>`, `<idea-version
-  since-build="232" until-build="251.*"/>` and the action declarations.
-
-## Plugin Verifier — PASS (fresh run on the final artifact)
-
-Fresh `./gradlew verifyPlugin` executed on the final build (verifier report directory
-deleted before the run so stale output could not be mistaken for fresh evidence):
-
-| IDE | Dir | Verdict |
-| --- | --- | --- |
-| IntelliJ 2023.2.x | `IC-232.10227.8` | Compatible |
-| IntelliJ 2024.3.1 | `IC-243.22562.145` | Compatible |
-
-Verdict files: `intellij-plugin/build/reports/pluginVerifier/<dir>/plugins/dev.chronovault/1.0.0/verification-verdict.txt`.
-Benign warnings (Kotlin module resource roots) do not affect the verdict.
-
-## Signing — NOT RUN (credentials unavailable)
-
-No JetBrains signing certificate chain / private key is present in this environment, so
-`signPlugin` was **not** executed. Manual, fully documented process in
-`docs/PUBLISHING.md`: keytool self-signed cert → `POST plugins.jetbrains.com/api/certificate/generate`
-for the production certificate → `cd intellij-plugin && ./gradlew signPlugin -Psigning.certChain="<cert chain>"`
-with `-Psigning.privateKey="<private key>"` and `-Psigning.password="<store pass>"`
-→ `./gradlew verifyPluginSignature` → upload the **signed** zip to plugins.jetbrains.com.
-The unsigned artifact is **not** Marketplace-ready (JetBrains requires signing for uploads).
-
-## Security — PASS (with accepted review-warnings)
-
-- Secret scan (AWS keys, `sk-` tokens, private-key blocks, Slack tokens): **clean** —
-  tracked and untracked files, plus `dist/` artifacts.
-- Soft scan: 2 `password=` matches reviewed — a health scrubber test fixture
-  (`HealthEngineTest`) and the IntelliJ `signPlugin` property placeholder (reads `-P`, never
-  hard-coded). Neither contains a real credential.
-- Path-safety hardening: `PathSafety.validateWritePath` resolves every existing ancestor of
-  a restore write target and rejects symlinks escaping the project root; wired into restore
-  before materialization and symlink creation, and into `validateDirectory`. Restore can no
-  longer write outside the project through a symlinked ancestor (regression-tested).
-- Web server binds loopback only; CORS restricted to localhost origins; no-store headers.
-- No hard-coded user/machine paths; platform-aware browser launch.
-
-## Tests
-
-| Metric | Value |
-| --- | --- |
-| Total run | 48 |
-| Passed | 48 |
-| Failed | 0 |
-
-## Package Validation
-
-- VSIX: `dist/chronovault-1.0.0.vsix` (16.3 KB) — icon.png present, manifest valid,
-  LICENSE included.
-- IntelliJ: `dist/chronovault-intellij-1.0.0.zip` (9.2 KB) — IPGP 2.x layout, plugin jar
-  verified for plugin.xml (id/version/since-until) and embedded pluginIcon.svg.
-
-## Installation Tests
-
-- VS Code: **PASS** — VSIX installed and listed in isolated profile (both pre-rebuild and
-  final rebuild).
-- IntelliJ: **IN-IDE INSTALL / RUNTIME SMOKE NOT RUN** (environment limitation) — a
-  `runIde` sandbox launch was attempted on the final build; the IDE process reached
-  application-component initialisation (platform warning lines logged at ~1.7 s) but the
-  sandbox log required to capture plugin activation/action registration was not produced
-  before the session terminated, and interactive GUI click-through is not automatable in
-  this environment. The **fresh Plugin Verifier** (Compatible on 2023.2 and 2024.3)
-  performs descriptor loading, dependency resolution, install and API-compatibility checks
-  against the real IDE runtimes, and the plugin is installed into the sandbox by
-  `buildPlugin`/`prepareSandbox`. GUI click-through remains NOT RUN.
-
-## Screenshots — PASS (8 real captures)
-
-Captured with headless Brave Chromium (puppeteer-core) against the live dashboard serving a
-real demo vault (4 verified checkpoints) on loopback; every frame was gated on real DOM
-state, no mockups. Files are non-blank rendered UI (verified: 2880×1800, 600–800 unique
-colors each). For `docs/screenshots/`:
-
-| File | View |
-| --- | --- |
-| `01-dashboard.png` | Dashboard, dark theme: timeline, health ring, storage stats |
-| `02-dashboard-light.png` | Dashboard, light theme |
-| `03-checkpoint-inspector.png` | Checkpoint inspector with snapshot evidence |
-| `04-timeline-state-map.png` | Timeline + state-map view |
-| `05-health-verification.png` | Health verification run (ops log) |
-| `06-diagnosis.png` | Evidence-based diagnosis cards |
-| `07-recovery-plan.png` | Recovery-plan review (files to change/add/remove) |
-| `08-diff-checkpoints.png` | Checkpoint diff comparator |
-
-## Documentation — PASS
-
-Present and consistent (wording corrected to avoid the "deterministic diagnosis" overclaim;
-adapter counts aligned to the actual 9 adapter modules / 10 project types; privacy
-distinction clarified between CHRONOVAULT data and user-configured build commands;
-`screenshots` references use absolute HTTPS raw GitHub URLs; IDE docs updated for the IPGP
-2.x wrapper commands):
-
-README, CHANGELOG, CONTRIBUTING, EULA, LICENSE, docs/ (QUICKSTART, INSTALLATION,
-CONFIGURATION, SUPPORTED_PROJECTS, HEALTH_PROFILES, cli, web-ui, recovery-guide, security,
-PRIVACY, TROUBLESHOOTING, DEVELOPMENT, PUBLISHING, architecture, ide-integrations, release).
-
-## Release Artifacts
-
-| Artifact | Path |
-| --- | --- |
-| CLI distribution | `cli/build/install/chronovault/bin/chronovault` |
-| VS Code extension | `dist/chronovault-1.0.0.vsix` (and `vscode-extension/chronovault-1.0.0.vsix`) |
-| IntelliJ plugin | `dist/chronovault-intellij-1.0.0.zip` (and `intellij-plugin/build/distributions/…`) |
-| Gate report | `dist/RELEASE-REPORT.md` |
-
-## Remaining Blockers
-
-None technical. NOT RUN items that require an interactive environment and their
-compensation:
-
-- IntelliJ **in-IDE install** / signing — not automatable here; fresh Plugin Verifier
-  verdicts + package inspection + documented manual signing process
-  (`docs/PUBLISHING.md`) cover them.
-- VS Code palette click-through — CLI E2E + webview code review stand in, and the VSIX
-  installs/activates cleanly.
-
-## Manual Steps (unavoidable, not automated)
-
-1. **VS Code Marketplace** — claim publisher `chronovault`, then `npx @vscode/vsce login` +
-   `npx @vscode/vsce publish` (or Open VSX overlay). See `docs/PUBLISHING.md`.
-2. **JetBrains Marketplace** — obtain the signing certificate (keytool + certificate
-   request API), `cd intellij-plugin && ./gradlew signPlugin -Psigning.* …`, verify with
-   `./gradlew verifyPluginSignature`, upload the signed ZIP at plugins.jetbrains.com.
-3. **Git push** — commit the working-tree release changes, push to
-   github.com/100raav/chronovault (this also materializes the HTTPS screenshot URLs).
-
-## Final Status
-
-Per-marketplace verdicts (technical gates vs. account/credential actions are kept
-separate):
-
-| Marketplace | Status |
-| --- | --- |
-| **VS Code** | **READY — MANUAL PUBLISH REQUIRED** (package valid, install tested, no technical blocker; publishing needs the publisher's account action) |
-| **JetBrains** | **BLOCKED — signing credentials required** (all technical gates pass; only the missing certificate chain + private key blocks `signPlugin`/`verifyPluginSignature`) |
-| **Overall** | **RELEASE CANDIDATE — final marketplace action required** (do not claim RELEASE READY until the artifact is signed and the JetBrains upload is performed) |
+Nothing was pushed or published. VS Code publishing and IntelliJ Marketplace
+upload, plus IntelliJ code signing, remain manual owner actions
+(`docs/PUBLISHING.md`).

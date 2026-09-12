@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * off the EDT (e.g. inside a background task). {@link #close()} is safe to call
  * from any thread.
  */
-public final class DashboardServer implements AutoCloseable {
+public final class DashboardServer implements AutoCloseable, DashboardApiClient {
 
     private static final String LOOPBACK = "127.0.0.1";
     private static final int DEFAULT_READY_TIMEOUT_SECONDS = 12;
@@ -43,8 +43,41 @@ public final class DashboardServer implements AutoCloseable {
         return port;
     }
 
+    /** Test-only: a server-like handle bound to an existing loopback port. */
+    static DashboardServer testInstance(int port) {
+        return new DashboardServer(null, port);
+    }
+
     public boolean isAlive() {
         return !closed.get() && process.isAlive();
+    }
+
+    /**
+     * Issue a request against the local dashboard API and return the raw body.
+     * Method is one of GET/POST (the CLI treats other verbs like GET at this API).
+     * Throws on transport errors or non-2xx responses.
+     */
+    @Override
+    public String request(String method, String pathAndQuery) throws IOException {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create("http://" + LOOPBACK + ":" + port + pathAndQuery).toURL().openConnection();
+            conn.setRequestMethod(method);
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(15000);
+            int code = conn.getResponseCode();
+            String body;
+            try (var in = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream()) {
+                body = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            if (code < 200 || code >= 300) {
+                throw new IOException("chronovault api " + method + " " + pathAndQuery
+                        + " -> HTTP " + code + " " + body);
+            }
+            return body;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
     }
 
     @Override

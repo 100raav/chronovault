@@ -3,6 +3,45 @@
 All notable changes to CHRONOVAULT are documented in this file. Dates are in
 `YYYY-MM-DD` format.
 
+## [1.0.3] — 2026-09-12
+
+### Fixed
+
+- **VS Code webview lifecycle** — the dashboard webview is now a true singleton
+  `WebviewPanel` (`DashboardPanel`): reopening the view reuses the live panel
+  (or rebuilds it only when it was closed), and the surviving `reveal()` calls no
+  longer throw on stale `WebviewPanelViewProvider` back-ends. Duplicate SSE
+  listeners across reconnects are eliminated by closing the previous stream for
+  an id before opening a new one, and a capped exponential-backoff reconnect
+  keeps the timeline live through server restarts.
+- **Dashboard API concurrency** — `chronovault ui` now rejects duplicate
+  simultaneous checkpoint/health/recover operations with `409` instead of
+  corrupting vault state.
+- Assertion-safe idle `verification` stats in the dashboard caused no harm but
+  now report cleanly.
+
+### Changed
+
+- **Time-machine themed dashboard** — warp rings behind the recovery wizard,
+  chrono rings and stream-flow timeline (ashes flowing along the ruler), chrono
+  halo/pulse on the active health node and a clock-glitch brand flicker; all
+  decorations are gated behind `prefers-reduced-motion`.
+- **Hardened IDE embedding** — the IntelliJ JCEF panel blocks any navigation
+  away from the loopback dashboard server, and the native fallback panel is now
+  fully functional (live status banner, checkpoint timeline, one-click
+  Checkpoint / Health / Diagnose / Restore) instead of a static message.
+- The dashboard now surfaces runtime diagnostics from a single modal
+  (component / cause / suggested fix + retry / reload / open diagnostics) and a
+  paginated diff viewer, plus a directed health-state map and per-check
+  inspector details.
+
+### Added
+
+- `/api/config` endpoint (adapter, build/test commands, retention policy) and
+  a watchdog that detects a dead dashboard stream, restarts SSE and reloads.
+- Decision to release IDE integrations as 1.0.3 while the core product/CLI
+  stays 1.0.0 (no core change in this release).
+
 ## [1.0.2] — 2026-09-12
 
 ### Added

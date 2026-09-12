@@ -11,15 +11,14 @@ const CANONICAL = path.join(ROOT, "cli", "src", "main", "resources", "web");
 
 const pkg = JSON.parse(fs.readFileSync(path.join(EXT, "package.json"), "utf-8"));
 
-test("manifest version is 1.0.2", () => {
-  assert.equal(pkg.version, "1.0.2");
+test("manifest version is 1.0.3", () => {
+  assert.equal(pkg.version, "1.0.3");
 });
 
-test("manifest exposes the embedded dashboard view", () => {
+test("manifest does not expose a deprecated dashboardView webview", () => {
   const views = pkg.contributes.views.chronovault;
   const dash = views.find((v) => v.id === "chronovault.dashboardView");
-  assert.ok(dash, "dashboardView webview contribution missing");
-  assert.equal(dash.type, "webview");
+  assert.equal(dash, undefined, "legacy dashboardView webview contribution still present");
 });
 
 test("manifest wires dashboard lifecycle commands", () => {
@@ -34,10 +33,6 @@ test("manifest wires dashboard lifecycle commands", () => {
   ]) {
     assert.ok(ids.includes(id), `command ${id} missing`);
   }
-  assert.ok(
-    pkg.activationEvents.includes("onView:chronovault.dashboardView"),
-    "activation event for the webview view missing"
-  );
 });
 
 test("webview dashboard is in sync with the canonical CLI dashboard", () => {

@@ -5,7 +5,7 @@ const path = require("path");
 const vscode = require("vscode");
 const { execFile, spawn } = require("child_process");
 const resolver = require("./cliResolver");
-const { DashboardViewProvider } = require("./dashboardView");
+const { DashboardPanel } = require("./dashboardPanel");
 
 const DEFAULT_TIMEOUT_MS = 30 * 1000;
 const RECOVERY_TIMEOUT_MS = 5 * 60 * 1000;
@@ -16,7 +16,20 @@ const LOCATE_RUNTIME = "chronovault.locateRuntime";
 let activeRuntime = null;
 let lastRuntimeWarningAt = -Infinity;
 let sidebarRef = null;
-let dashboardProvider = null;
+let dashboardPanel = null;
+
+function getDashboardPanel(context) {
+  if (!dashboardPanel) {
+    dashboardPanel = new DashboardPanel(context, {
+      cliResolver: { resolve: async () => {
+        const runtime = resolveRuntime();
+        return runtime && runtime.cli ? runtime.cli : null;
+      } },
+      getProjectRoot: activeProjectRoot
+    });
+  }
+  return dashboardPanel;
+}
 
 function resolveRuntime() {
   if (activeRuntime) return activeRuntime;
@@ -38,7 +51,10 @@ function invalidateRuntime() {
 
 function refreshChronovaultViews() {
   if (sidebarRef) sidebarRef.refresh();
-  if (dashboardProvider) dashboardProvider.reload().catch(() => {});
+  if (dashboardPanel) {
+    dashboardPanel.reload().catch(() => {});
+    dashboardPanel.refresh();
+  }
   refreshStatusInternal();
 }
 
@@ -131,6 +147,20 @@ function showRuntimeNeeded() {
     } else if (choice === "Retry") {
       vscode.commands.executeCommand("chronovault.checkRuntime");
     }
+  });
+}
+
+function showRuntimeNeededFor(message, status) {
+  const now = Date.now();
+  if (now - lastRuntimeWarningAt < RUNTIME_WARNING_COOLDOWN_MS) return;
+  lastRuntimeWarningAt = now;
+  const actions = status === "INVALID" || status === "INCOMPATIBLE"
+    ? ["Configure CLI", "Retry"]
+    : ["Configure CLI", "Locate Runtime", "Retry"];
+  vscode.window.showWarningMessage(message, { modal: false }, ...actions).then(choice => {
+    if (choice === "Configure CLI") vscode.commands.executeCommand(CONFIGURE_CLI);
+    else if (choice === "Locate Runtime") vscode.commands.executeCommand(LOCATE_RUNTIME);
+    else if (choice === "Retry") vscode.commands.executeCommand("chronovault.checkRuntime");
   });
 }
 
@@ -239,7 +269,7 @@ class ChronovaultSidebarProvider {
       actionItem("$(debug-alt) What broke it?", "diagnose last change", "chronovault.diagnose"),
       actionItem("$(history) Restore last good", "protected recovery", "chronovault.restore"),
       actionItem("$(shield) Protection status", "current vault state", "chronovault.status"),
-      actionItem("$(globe) Open dashboard", "web dashboard", "chronovault.dashboard"),
+      actionItem("$(globe) Open dashboard", "embedded console", "chronovault.dashboard"),
       runtimeItem
     ];
   }
@@ -274,19 +304,6 @@ function activate(context) {
   sidebarRef = sidebar;
   const treeView = vscode.window.createTreeView("chronovault.sidebar", { treeDataProvider: sidebar });
 
-  dashboardProvider = new DashboardViewProvider(context, {
-    cliResolver: {
-      resolve: async () => {
-        const runtime = resolveRuntime();
-        return runtime && runtime.cli ? runtime.cli : null;
-      }
-    },
-    getProjectRoot: activeProjectRoot
-  });
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("chronovault.dashboardView", dashboardProvider)
-  );
-
   const handler = (fn) => {
     return async function wrapped() {
       try {
@@ -301,12 +318,27 @@ function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand("chronovault.checkRuntime", handler(async () => {
       invalidateRuntime();
-      const runtime = resolveRuntime();
-      if (runtime.cli) {
-        vscode.window.showInformationMessage("CHRONOVAULT runtime ready: " + runtime.detail);
-      } else {
-        showRuntimeNeeded();
-      }
+      const cfg = vscode.workspace.getConfiguration("chronovault");
+      const ext = vscode.extensions.getExtension("chronovault.chronovault");
+      const status = await resolver.resolveCliStatus({
+        configuredPath: cfg.get("cliPath", resolver.DEFAULT_NAME),
+        bundledDir: ext && ext.extensionPath ? path.join(ext.extensionPath, "bin") : undefined,
+        env: process.env,
+        platform: process.platform,
+        probe: true
+      });
+      activeRuntime = status.cli
+        ? { cli: status.cli, source: status.source, detail: status.detail }
+        : null;
+      const label = {
+        READY: "CHRONOVAULT runtime ready: " + status.detail,
+        NOT_FOUND: "CHRONOVAULT runtime NOT FOUND — check PATH, ~/.local/bin, ~/bin, or use Configure CLI.",
+        INVALID: "CHRONOVAULT runtime INVALID — the configured path is not an executable: " + status.detail,
+        INCOMPATIBLE: "CHRONOVAULT runtime INCOMPATIBLE — the binary does not run as chronovault: " + status.detail,
+      }[status.status] || "CHRONOVAULT runtime status unknown.";
+      if (status.status === "READY") vscode.window.showInformationMessage(label);
+      else showRuntimeNeededFor(label, status.status);
+      refreshChronovaultViews();
     })),
 
     vscode.commands.registerCommand("chronovault.checkpoint", handler(async () => {
@@ -371,11 +403,10 @@ function activate(context) {
     })),
 
     vscode.commands.registerCommand("chronovault.dashboard", handler(async () => {
-      if (dashboardProvider && dashboardProvider.view) {
-        dashboardProvider.view.reveal(vscode.ViewColumn.Active);
-        return;
-      }
-      await vscode.commands.executeCommand("chronovault.dashboardView.focus");
+      // Opens (or reuses) the editor WebviewPanel dashboard. `reveal()` is only
+      // ever called by DashboardPanel on an actual WebviewPanel — never on a
+      // provider or WebviewView (the 1.0.2 defect).
+      await getDashboardPanel(context).open();
     })),
 
     vscode.commands.registerCommand("chronovault.dashboardBrowser", handler(async () => {
@@ -383,7 +414,12 @@ function activate(context) {
     })),
 
     vscode.commands.registerCommand("chronovault.refreshDashboard", handler(async () => {
-      if (dashboardProvider) await dashboardProvider.refresh();
+      if (dashboardPanel) {
+        await dashboardPanel.refresh();
+        await dashboardPanel.reload().catch(() => {});
+      } else {
+        vscode.window.showInformationMessage("CHRONOVAULT dashboard is not open.");
+      }
     })),
 
     vscode.commands.registerCommand(CONFIGURE_CLI, handler(() => configureCli())),
@@ -414,8 +450,8 @@ function stripAnsi(s) {
 }
 
 function deactivate() {
-  if (dashboardProvider) dashboardProvider.dispose();
-  dashboardProvider = null;
+  if (dashboardPanel) dashboardPanel.dispose();
+  dashboardPanel = null;
   sidebarRef = null;
   statusItemRef = null;
 }

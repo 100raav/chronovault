@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const DEFAULT_NAME = "chronovault";
 
@@ -131,9 +132,110 @@ function resolveCli(opts) {
   return { cli: null, source: "missing", detail: configured || DEFAULT_NAME };
 }
 
+/**
+ * Verify that an executable actually runs as the chronovault CLI by invoking
+ * `cli version` with a short timeout. Returns { ok, version, detail }.
+ * Never blocks indefinitely.
+ */
+function probeRuntime(cli, opts) {
+  opts = opts || {};
+  const timeoutMs = opts.timeoutMs || 4000;
+  return new Promise((resolve) => {
+    if (!cli) {
+      resolve({ ok: false, version: null, detail: "no runtime path" });
+      return;
+    }
+    let child;
+    try {
+      child = spawn(cli, ["version"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
+    } catch (e) {
+      resolve({ ok: false, version: null, detail: String(e.message || e) });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try { child.kill("SIGKILL"); } catch (e) { /* noop */ }
+    }, timeoutMs);
+    let out = "";
+    let err = "";
+    child.stdout && child.stdout.on("data", (d) => { out += String(d); });
+    child.stderr && child.stderr.on("data", (d) => { err += String(d); });
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve({ ok: false, version: null, detail: "not executable: " + (e.code || e.message) });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      const line = (out || err || "").split("\n")[0].trim();
+      const version = /CHRONOVAULT v?.+/.test(line) ? line : null;
+      if (code === 0 && version) {
+        resolve({ ok: true, version, detail: line });
+      } else {
+        resolve({
+          ok: false,
+          version: version || null,
+          detail: "command exited with code " + code + (line ? ": " + line : ""),
+        });
+      }
+    });
+  });
+}
+
+/**
+ * Produce a runtime status model:
+ *   READY       — an executable chronovault CLI was found and `chronovault version` runs.
+ *   NOT_FOUND   — no chronovault binary could be located.
+ *   INVALID     — a candidate was found but it is not an executable file.
+ *   INCOMPATIBLE— the binary runs but does not identify as CHRONOVAULT.
+ * `probe` is opt-in because spawning on client startup is wasteful.
+ */
+async function resolveCliStatus(opts) {
+  opts = opts || {};
+  const configuredRaw = String(opts.configuredPath || "").trim();
+  const configured = configuredRaw && configuredRaw !== DEFAULT_NAME ? configuredRaw : null;
+  const platform = platformOf(opts.platform);
+  const env = opts.env || process.env;
+
+  const base = resolveCli({
+    configuredPath: opts.configuredPath,
+    bundledDir: opts.bundledDir,
+    env,
+    platform,
+  });
+
+  if (configured) {
+    const check = isExecutable(configured, platform);
+    if (!check.ok) {
+      return { status: "INVALID", cli: configured, source: "configured", detail: configured + " (" + check.reason + ")" };
+    }
+    if (opts.probe) {
+      const probe = await probeRuntime(configured, opts);
+      return probe.ok
+        ? { status: "READY", cli: configured, source: "configured", detail: probe.detail }
+        : { status: "INCOMPATIBLE", cli: configured, source: "configured", detail: probe.detail };
+    }
+    return { status: "READY", cli: configured, source: "configured", detail: configured };
+  }
+
+  if (!base.cli) {
+    return { status: "NOT_FOUND", cli: null, source: "missing", detail: "no chronovault binary located (PATH, ~/.local/bin, ~/bin, /usr/local/bin, /opt/bin, bundled)" };
+  }
+
+  if (opts.probe) {
+    const probe = await probeRuntime(base.cli, opts);
+    if (probe.ok) return { status: "READY", cli: base.cli, source: base.source, detail: probe.detail };
+    return { status: "INCOMPATIBLE", cli: base.cli, source: base.source, detail: probe.detail };
+  }
+  return { status: "READY", cli: base.cli, source: base.source, detail: base.detail };
+}
+
 module.exports = {
   DEFAULT_NAME: DEFAULT_NAME,
   resolveCli: resolveCli,
+  resolveCliStatus: resolveCliStatus,
+  probeRuntime: probeRuntime,
   isExecutable: isExecutable,
   searchPath: searchPath,
   safeLocations: safeLocations,

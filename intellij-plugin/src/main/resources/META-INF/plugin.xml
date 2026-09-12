@@ -27,6 +27,13 @@
     environment variable to the full path of the binary.
   ]]></description>
   <change-notes><![CDATA[
+    <h3>1.0.3</h3>
+    <ul>
+      <li><b>Loopback-only dashboard.</b> The embedded panel now routes all traffic strictly to the local 127.0.0.1 chronovault server; the JCEF browser blocks any navigation to other URLs, and the native panel talks only to the in-process server.</li>
+      <li><b>Functional native dashboard.</b> When JCEF is unavailable the tool window now shows a live native console — status banner, checkpoint timeline, and one-click Checkpoint / Health / Diagnose / Restore — instead of a static message. Polls every 5s off the UI thread.</li>
+      <li>Dashboard server now exposes <code>request(method, path)</code> against the API and is covered by pure-JDK tests.</li>
+      <li>Time-machine themed dashboard (warp rings, stream flow, chrono halo) with reduced-motion support.</li>
+    </ul>
     <h3>1.0.2</h3>
     <ul>
       <li><b>Embedded dashboard.</b> The CHRONOVAULT tool window now loads the full temporal console in-place via JCEF: timeline with hover tooltips, health state map, storage visualization, recovery wizard and live SSE updates — no browser needed.</li>

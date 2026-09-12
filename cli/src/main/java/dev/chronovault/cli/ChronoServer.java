@@ -38,9 +38,20 @@ public final class ChronoServer {
     private final ScheduledExecutorService ticker = Executors.newSingleThreadScheduledExecutor();
     private static final int SSE_HEARTBEAT_SECONDS = 15;
 
+    /** Guards against duplicate concurrent operations of the same kind (409). */
+    private final Map<String, OperationId> activeOps = new ConcurrentHashMap<>();
+
     public ChronoServer(ChronoVault vault, int port) {
         this.vault = vault;
         this.port = port;
+    }
+
+    private boolean tryClaim(String kind, OperationId opId) {
+        return activeOps.putIfAbsent(kind, opId) == null;
+    }
+
+    private void release(String kind) {
+        activeOps.remove(kind);
     }
 
     public void start() throws IOException {
@@ -94,13 +105,18 @@ public final class ChronoServer {
         try {
             if (method.equals("GET") && path.equals("/api/state")) { json(exchange, state()); }
             else if (method.equals("GET") && path.equals("/api/meta")) { json(exchange, meta()); }
+            else if (method.equals("GET") && path.equals("/api/config")) { json(exchange, config()); }
             else if (method.equals("GET") && path.equals("/api/checkpoints")) { json(exchange, vault.checkpointService().list(vault.projectContext())); }
             else if (method.equals("GET") && path.startsWith("/api/checkpoint/")) {
                 String id = path.substring("/api/checkpoint/".length());
                 json(exchange, vault.checkpoint(CheckpointId.of(id)).orElse(null));
             }
             else if (method.equals("POST") && path.equals("/api/checkpoint")) {
-                json(exchange, asyncOp("CREATE_CHECKPOINT", prog -> {
+                if (!tryClaim("checkpoint", OperationId.generate())) {
+                    error(exchange, 409, "A checkpoint operation is already running");
+                    return;
+                }
+                json(exchange, asyncOp("CREATE_CHECKPOINT", () -> release("checkpoint"), prog -> {
                     try {
                         HealthResult health = vault.runHealth(prog);
                         Checkpoint cp = vault.createSnapshotOnly(null, prog);
@@ -116,9 +132,17 @@ public final class ChronoServer {
                 }));
             }
             else if (method.equals("POST") && path.equals("/api/health")) {
-                json(exchange, asyncOp("RUN_HEALTH", prog -> vault.runHealth(prog)));
+                if (!tryClaim("health", OperationId.generate())) {
+                    error(exchange, 409, "A health-check operation is already running");
+                    return;
+                }
+                json(exchange, asyncOp("RUN_HEALTH", () -> release("health"), prog -> vault.runHealth(prog)));
             }
             else if (method.equals("POST") && path.equals("/api/recover")) {
+                if (!tryClaim("recover", OperationId.generate())) {
+                    error(exchange, 409, "A recovery operation is already running");
+                    return;
+                }
                 String to = q.get("to");
                 String verifyStr = q.getOrDefault("verify", "true");
                 boolean verify = Boolean.parseBoolean(verifyStr);
@@ -131,7 +155,7 @@ public final class ChronoServer {
                 String finalTo = to;
                 java.util.List<String> paths = (pathsParam == null || pathsParam.isBlank()) ? null
                     : java.util.Arrays.stream(pathsParam.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
-                json(exchange, asyncOpStage("RECOVER", stageProgress -> {
+                json(exchange, asyncOpStage("RECOVER", () -> release("recover"), stageProgress -> {
                     try {
                         if (paths != null && !paths.isEmpty()) {
                             return vault.executeRecovery(CheckpointId.of(finalTo),
@@ -193,10 +217,30 @@ public final class ChronoServer {
     private Object meta() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", "CHRONOVAULT");
-        m.put("version", "1.0.2");
+        m.put("version", "1.0.3");
         m.put("project", vault.projectContext().root().toString());
         m.put("projectName", vault.projectContext().name());
         m.put("tagline", "Return to the moment your code still worked.");
+        return m;
+    }
+
+    /** Runtime/adapter/retention configuration for the dashboard header + storage line. */
+    private Object config() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        var vc = vault.projectContext().config();
+        var detected = vault.adapterRegistry().detect(vault.projectContext().root());
+        m.put("adapter", detected.map(d -> d.projectType().name()).orElse("generic"));
+        m.put("buildCommand", detected.map(d -> d.buildCommand()).orElse(null));
+        m.put("testCommand", detected.map(d -> d.testCommand()).orElse(null));
+        m.put("packageManager", detected.map(d -> d.packageManager()).orElse(null));
+        m.put("healthProfile", vc.activeHealthProfile());
+        var r = vc.retention();
+        m.put("retention", r.keepLatest() + " latest \u00b7 " + r.keepDays() + "d"
+            + (r.keepPinned() ? " \u00b7 keep-pinned" : "") + (r.keepLastHealthy() ? " \u00b7 keep-healthy" : ""));
+        m.put("initialized", true);
+        Map<String, Object> cli = new LinkedHashMap<>();
+        cli.put("version", "1.0.0");
+        m.put("cli", cli);
         return m;
     }
 
@@ -281,7 +325,7 @@ public final class ChronoServer {
 
     // --------------------------------------------------------------- async ops
 
-    private Object asyncOp(String kind, java.util.function.Function<Consumer<String>, Object> task) {
+    private Object asyncOp(String kind, Runnable onDone, java.util.function.Function<Consumer<String>, Object> task) {
         OperationId opId = OperationId.generate();
         new Thread(() -> {
             Consumer<OperationUpdate> pub = u -> vault.eventBus().publish(u);
@@ -298,6 +342,8 @@ public final class ChronoServer {
             } catch (Exception e) {
                 pub.accept(new OperationUpdate(opId, OperationStage.FAILED, 0,
                     "ERROR: " + e.getMessage(), java.time.Instant.now()));
+            } finally {
+                if (onDone != null) onDone.run();
             }
         }, "cv-ui-" + opId).start();
         return Map.of("operationId", opId.value(), "status", "STARTED", "kind", kind);
@@ -305,7 +351,7 @@ public final class ChronoServer {
 
     /** Like {@link #asyncOp} but forwards the real, stage-carrying progress, so the
      *  dashboard can drive a recovery wizard from genuinely emitted operation stages. */
-    private Object asyncOpStage(String kind,
+    private Object asyncOpStage(String kind, Runnable onDone,
                                 java.util.function.Function<java.util.function.BiConsumer<OperationStage, String>, Object> task) {
         OperationId opId = OperationId.generate();
         new Thread(() -> {
@@ -330,6 +376,8 @@ public final class ChronoServer {
             } catch (Exception e) {
                 pub.accept(new OperationUpdate(opId, OperationStage.FAILED, 0,
                     "ERROR: " + e.getMessage(), java.time.Instant.now()));
+            } finally {
+                if (onDone != null) onDone.run();
             }
         }, "cv-ui-" + opId).start();
         return Map.of("operationId", opId.value(), "status", "STARTED", "kind", kind);

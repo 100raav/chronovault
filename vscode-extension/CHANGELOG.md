@@ -2,6 +2,35 @@
 
 All notable changes are documented in chronological order.
 
+## [1.0.3] — 2026-09-12
+
+### Fixed
+
+- **Webview lifecycle** — the Dashboard view is now a singleton `WebviewPanel`;
+  `reveal()` is only ever called on a live, non-disposed panel, eliminating the
+  stale `WebviewPanelViewProvider` errors when reopening the view.
+- **SSE reconnect hygiene** — the extension closes the previous stream for an
+  id before reopening it, and the webview bridge reconnects with capped
+  exponential backoff, so reconnects no longer stack duplicate event listeners.
+- Concurrency guard: the dashboard server now rejects duplicate simultaneous
+  checkpoint/health/recover operations with `409`.
+
+### Changed
+
+- **Time-machine theme** — warp rings, chrono rings, stream-flow timeline,
+  chrono halo and clock-glitch flicker (all `prefers-reduced-motion`-gated).
+- Dashboard adds runtime diagnostics modal, paginated diff viewer, directed
+  health-state map and per-check inspector details; watchdog restarts a dead
+  SSE stream automatically.
+- New `/api/config` endpoint (adapter, build/test commands, retention).
+
+### Added
+
+- Native dashboard panel (`dashboardPanel.test.js`, `commands.test.js`) and
+  `scripts/check-html-sync.js` lint coverage; 27 unit tests total.
+
+[1.0.3]: https://github.com/100raav/chronovault/releases/tag/v1.0.3
+
 ## [1.0.2] — 2026-09-12
 
 ### Added

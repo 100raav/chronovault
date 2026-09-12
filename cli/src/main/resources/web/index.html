@@ -44,6 +44,7 @@
 <main>
   <!-- ======================= HERO / STATUS ======================= -->
   <section class="hero" aria-label="Vault status">
+    <div class="chrono-stage" aria-hidden="true"><div class="ck ck-1"></div><div class="ck ck-2"></div><div class="ck ck-3"></div></div>
     <div class="health-wrap">
       <svg class="health-ring" viewBox="0 0 120 120" aria-hidden="true">
         <circle class="ring-bg" cx="60" cy="60" r="50"/>
@@ -62,13 +63,15 @@
     <div class="hero-info">
       <p class="project-path" id="projectPath">—</p>
       <h2 id="projectName">—</h2>
+      <p class="subline"><span class="kbd-label">detected</span> <strong id="adapterLine" class="time-chip">—</strong></p>
       <p class="subline"><span class="kbd-label">last verified</span> <strong id="lastVerified" class="time-chip">none</strong></p>
       <div class="stat-grid" aria-label="Vault statistics">
         <div class="stat"><span class="stat-num" id="statCheckpoints">0</span><span class="stat-label">checkpoints</span></div>
         <div class="stat"><span class="stat-num" id="statSnapshots">0</span><span class="stat-label">snapshots</span></div>
         <div class="stat"><span class="stat-num" id="statObjects">0</span><span class="stat-label">objects</span></div>
         <div class="stat"><span class="stat-num" id="statPhys">0 B</span><span class="stat-label">stored</span></div>
-        <div class="stat"><span class="stat-num" id="statLogical">0 B</span><span class="stat-label">logical</span></div>
+        <div class="stat"><span class="stat-num" id="statProtected">0</span><span class="stat-label">protected</span></div>
+        <div class="stat"><span class="stat-num" id="statRecovery">0</span><span class="stat-label">recoveries</span></div>
         <div class="stat"><span class="stat-num" id="statDedup">0%</span><span class="stat-label">dedup</span></div>
       </div>
       <div class="store-vis" aria-label="Object store utilization" role="img">
@@ -80,8 +83,9 @@
         <div class="store-legend">
           <span class="store-k physical"><i></i>physical</span>
           <span class="store-k dedup"><i></i>deduplicated</span>
-          <span class="store-sizes"><b id="storePhysSize">0 B</b> of <b id="storeLogicalSize">0 B</b></span>
+          <span class="store-sizes"><b id="storePhysicalSize">0 B</b> physical · <b id="storeLogicalSize">0 B</b> logical</span>
         </div>
+        <div class="store-retention" id="storeRetention">retention: — · gc: —</div>
       </div>
     </div>
 
@@ -242,6 +246,12 @@
 
 <!-- ======================== RECOVERY WIZARD ======================== -->
 <div class="wizard-backdrop" id="wizardShell" aria-hidden="true">
+  <div class="warp" aria-hidden="true">
+    <div class="warp-ring warp-ring-a"></div>
+    <div class="warp-ring warp-ring-b"></div>
+    <div class="warp-ring warp-ring-c"></div>
+    <div class="warp-lines"></div>
+  </div>
   <div class="wizard" role="dialog" aria-modal="true" aria-labelledby="wizardTitle">
     <div class="wizard-head">
       <h3 id="wizardTitle">Temporal Recovery</h3>
@@ -258,9 +268,44 @@
 </div>
 
 <footer class="foot">
-  <span>CHRONOVAULT v<span id="version">1.0.2</span></span>
+  <span>CHRONOVAULT v<span id="version">1.0.3</span></span>
   <span id="footProject">—</span>
 </footer>
+
+<!-- ======================== DASHBOARD ERROR SCREEN ======================== -->
+<div class="error-backdrop" id="cvError" role="alertdialog" aria-modal="true" aria-labelledby="cvErrorTitle" hidden>
+  <div class="error-card">
+    <h2 id="cvErrorTitle">CHRONOVAULT DASHBOARD ERROR</h2>
+    <dl class="error-facts">
+      <div class="error-fact"><dt>Component</dt><dd id="evComponent">—</dd></div>
+      <div class="error-fact"><dt>Cause</dt><dd id="evCause">—</dd></div>
+      <div class="error-fact"><dt>Runtime</dt><dd id="evRuntime">—</dd></div>
+      <div class="error-fact"><dt>Suggested action</dt><dd id="evSuggest">—</dd></div>
+    </dl>
+    <div class="error-actions">
+      <button class="btn btn-primary" id="evRetry"><span class="btn-icon">↻</span> Retry</button>
+      <button class="btn" id="evReload"><span class="btn-icon">⇧</span> Reload Dashboard</button>
+      <button class="btn" id="evDiagnostics"><span class="btn-icon">⌕</span> Open Diagnostics</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== DIAGNOSTICS MODAL ======================== -->
+<div class="modal-backdrop" id="diagModal" aria-hidden="true">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="diagModalTitle">
+    <div class="modal-head">
+      <h3 id="diagModalTitle">CHRONOVAULT Diagnostics</h3>
+      <button class="iconbtn" data-close-modal>✕</button>
+    </div>
+    <div class="modal-body">
+      <dl class="diag-grid" id="diagGrid"></dl>
+      <div class="diag-logs" id="diagLogs"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close-modal>Close</button>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

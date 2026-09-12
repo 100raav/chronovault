@@ -10,7 +10,7 @@ cd intellij-plugin
 ./gradlew buildPlugin
 ```
 
-Install `build/distributions/chronovault-intellij-1.0.2.zip` via
+Install `build/distributions/chronovault-intellij-1.0.3.zip` via
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 ## Usage

@@ -20,6 +20,7 @@
   var pending = Object.create(null);
   var nextId = 0;
   var eventSources = Object.create(null);
+  var MAX_SSE_RETRIES = 5;
 
   function post(type, payload) {
     if (typeof vscode !== "undefined") {
@@ -59,22 +60,74 @@
     this.onopen = null;
     this.onmessage = null;
     this.onerror = null;
+    this.retries = 0;
+    this.connected = false;
+    this.fatal = false;
+    this.timer = null;
     eventSources[this.id] = this;
-    post("sse", { id: this.id, path: String(path) });
+    this.open();
   }
+  CVEventSource.prototype.open = function open() {
+    var self = this;
+    if (this.fatal) return;
+    post("sse", { id: this.id, path: String(this.path) });
+  };
+  CVEventSource.prototype.scheduleReconnect = function scheduleReconnect() {
+    var self = this;
+    if (this.fatal) return;
+    if (this.retries >= MAX_SSE_RETRIES) {
+      this.fatal = true;
+      if (this.onerror) this.onerror.call(this, { fatal: true });
+      return;
+    }
+    var delay = Math.min(250 * Math.pow(2, this.retries), 4000);
+    this.retries += 1;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(function () {
+      this.connected = false;
+      // close the previous (possibly half-open) server-side stream first, so a
+      // re-open is never duplicated.
+      post("sse-close", { id: self.id });
+      self.open();
+    }, delay);
+  };
+  CVEventSource.prototype.reconnectNow = function reconnectNow() {
+    if (this.fatal) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.connected = false;
+    post("sse-close", { id: this.id });
+    this.open();
+  };
   CVEventSource.prototype.close = function close() {
+    this.fatal = true;
+    if (this.timer) clearTimeout(this.timer);
     var id = this.id;
     delete eventSources[id];
     post("sse-close", { id: id });
   };
   window.EventSource = CVEventSource;
 
+  window.cvReconnectSSE = function cvReconnectSSE() {
+    Object.keys(eventSources).forEach(function (id) {
+      var es = eventSources[id];
+      if (es && !es.fatal) es.reconnectNow();
+    });
+  };
+
   function dispatchEventSource(type, id, payload) {
     var es = eventSources[id];
     if (!es) return;
-    if (type === "sse-open" && es.onopen) es.onopen.call(es, payload || {});
-    else if (type === "sse" && es.onmessage) es.onmessage.call(es, payload || {});
-    else if (type === "sse-error" && es.onerror) es.onerror.call(es, payload || {});
+    if (type === "sse-open") {
+      es.connected = true;
+      es.retries = 0;
+      if (es.onopen) es.onopen.call(es, payload || {});
+    } else if (type === "sse") {
+      if (es.onmessage) es.onmessage.call(es, payload || {});
+    } else if (type === "sse-error") {
+      es.connected = false;
+      if (es.onerror) es.onerror.call(es, payload || {});
+      es.scheduleReconnect();
+    }
   }
 
   /* ---------- theme + metadata ---------------------------------------- */

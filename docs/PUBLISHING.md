@@ -30,17 +30,17 @@ The gate:
 | Artifact | Path |
 | --- | --- |
 | CLI distribution | `cli/build/install/chronovault/` |
-| VS Code extension | `dist/chronovault-1.0.2.vsix` (stage: `vscode-extension/chronovault-1.0.2.vsix`) |
-| IntelliJ plugin | `dist/chronovault-intellij-1.0.2.zip` (stage: `intellij-plugin/build/distributions/...`) |
+| VS Code extension | `dist/chronovault-1.0.3.vsix` (stage: `vscode-extension/chronovault-1.0.3.vsix`) |
+| IntelliJ plugin | `dist/chronovault-intellij-1.0.3.zip` (stage: `intellij-plugin/build/distributions/...`) |
 | Release report | `dist/RELEASE-REPORT.md` and `docs/release/RELEASE-REPORT.md` |
 
 Inspect before publishing:
 
 ```bash
-unzip -l vscode-extension/chronovault-1.0.2.vsix
-unzip -l intellij-plugin/build/distributions/chronovault-intellij-1.0.2.zip
-unzip -p intellij-plugin/build/distributions/chronovault-intellij-1.0.2.zip \
-  chronovault-intellij/lib/chronovault-intellij-1.0.2.jar META-INF/plugin.xml
+unzip -l vscode-extension/chronovault-1.0.3.vsix
+unzip -l intellij-plugin/build/distributions/chronovault-intellij-1.0.3.zip
+unzip -p intellij-plugin/build/distributions/chronovault-intellij-1.0.3.zip \
+  chronovault-intellij/lib/chronovault-intellij-1.0.3.jar META-INF/plugin.xml
 ```
 
 ## 3. VS Code Marketplace (MANUAL)
@@ -52,11 +52,11 @@ unzip -p intellij-plugin/build/distributions/chronovault-intellij-1.0.2.zip \
    ```bash
    cd vscode-extension
    npx -y @vscode/vsce login chronovault
-   npx -y @vscode/vsce package      # -> chronovault-1.0.2.vsix
+   npx -y @vscode/vsce package      # -> chronovault-1.0.3.vsix
    ```
 4. [Optional] Open VSX (open-source overlay marketplace):
    ```bash
-   npx -y @vscode/vsce publish --packagePath chronovault-1.0.2.vsix
+   npx -y @vscode/vsce publish --packagePath chronovault-1.0.3.vsix
    ```
 5. Promote 🖥️ → ✅ workspaces, when verified.
 
