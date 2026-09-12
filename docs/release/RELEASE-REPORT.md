@@ -21,14 +21,15 @@ IDE artifacts with hashes, and stops short of any marketplace action.
 
 | Gate | Result |
 | --- | --- |
-| VS Code unit tests (resolver/dashboardServer/packageManifest/dashboardPanel/commands) | PASS (27, 0 fail) |
-| Lint (`npm run lint` incl. `check-html-sync`) | PASS |
+| VS Code unit tests (resolver/dashboardServer/packageManifest/dashboardPanel/commands) | PASS (28, 0 fail) |
+| Lint (`npm run lint` incl. `check-html-sync` + `check-dashboard-a11y`) | PASS |
 | IntelliJ unit tests (pure-JDK + HTTP-stub) | PASS (28, 0 fail) |
 | `buildPlugin` → `chronovault-intellij-1.0.3.zip` | PASS |
 | Plugin Verifier (fresh) — IC-232.10227.8 / IC-243.22562.145 | PASS (both Compatible) |
 | CLI/core build + core tests (15 files) | PASS |
 | Artifact icon + structure + patched plugin.xml checks | PASS |
 | Secret scan (source + packaged artifacts) | PASS |
+| Headless dashboard render (8 screenshots, 1440×900@2x) | PASS |
 | IntelliJ signing | **NOT RUN** — no marketplace certificates provided (manual step, see `docs/PUBLISHING.md`) |
 
 ## Broken / changed this cycle
@@ -88,6 +89,45 @@ IDE artifacts with hashes, and stops short of any marketplace action.
 - `/api/config` GET added; `/api/meta` version → 1.0.3; CLI version reported
   as 1.0.0 (`Main.VERSION` is `private`, mirrored as a literal in `config()`).
 
+## Gap closure (follow-up to the honest acceptance review)
+
+The earlier report listed five gaps between the shipped build and the product
+claims. This cycle closed three of them and formally re-verified the feature
+surface; the remaining two are environment/manual and stay **NOT RUN** by design.
+
+- **Secure webview asset loading (`asWebviewUri`)** — the dashboard HTML no
+  longer references relative `./app.js` / `./bridge.js` / `./styles.css`. The
+  canonical source carries `__CV_ICON_URI__`, `__CV_STYLES_URI__`,
+  `__CV_BRIDGE_URI__`, `__CV_APP_URI__` placeholders that `dashboardPanel.js`
+  resolves through `web.asWebviewUri(vscode.Uri.joinPath(...))` at load time, so
+  the webview works under a strict `default-src 'none'` CSP and survives VS
+  Code's webview resource root rules. `check-html-sync.js` now rejects relative
+  asset refs, and `packageManifest.test.js` asserts the placeholder contract.
+- **Accessibility audit** — new `scripts/check-dashboard-a11y.js` verifies dialog
+  roles (`role="dialog"` + `aria-modal`), labelled-by targets, the error
+  `alertdialog`, polite live regions (`#toasts`, `#healthState`), per-control
+  discernible labels (icon-only buttons now `aria-label="Close"`, command
+  palette input labelled), decorative `aria-hidden`, and reduced-motion
+  coverage. It is wired into `npm run lint`, so a11y regressions fail the lint.
+- **Fresh, version-stamped screenshots** — all 8 views in `docs/screenshots/`
+  were regenerated headlessly (Puppeteer, 1440×900@2x) against a live
+  `chronovault ui` session driving a demo vault through verified → broken →
+  diagnosed → recovered states, so the images now show the 1.0.3 time-machine
+  theme rather than the pre-theme UI.
+- **Feature checklist re-verification** — source-level confirmation that the
+  claimed surface exists: `extension.js` registers the dashboard/locate/retry
+  commands and surfaces READY/NOT_FOUND runtime states; `cliResolver.js` probes
+  READY / NOT_FOUND / INVALID / INCOMPATIBLE; `bridge.js` reconnect backoff
+  (`MAX_SSE_RETRIES=5`, `scheduleReconnect`, `reconnectNow`,
+  `window.cvReconnectSSE`); `ChronoServer.java` enforces the `409` concurrency
+  guard and serves `/api/config`.
+- **Gate coverage fix** — `scripts/release.sh` gained step **5b** running the
+  VS Code `npm test` and `npm run lint` suites; previously the release gate never
+  exercised them even though they were green in CI-style runs.
+- **Still NOT RUN (by design):** IntelliJ code signing (no certificates) and
+  interactive GUI acceptance in real VS Code / IntelliJ (headless gate cannot
+  drive IDE sessions). Both remain documented manual owner actions.
+
 ## Architecture notes
 
 - The **dashboard is a single source of truth** in `cli/src/main/resources/web/`;
@@ -106,7 +146,8 @@ IDE artifacts with hashes, and stops short of any marketplace action.
 
 - `./gradlew clean build` (core) — tests computed dynamically; 15 core test
   classes, 0 failures.
-- `npm test` — 27 VS Code tests, 0 failures; `npm run lint` clean.
+- `npm test` — 28 VS Code tests, 0 failures; `npm run lint` clean (syntax,
+  webview sync via `check-html-sync.js`, and a11y via `check-dashboard-a11y.js`).
 - `:intellij-plugin test` — 28 tests, 0 failures; `buildPlugin` produced the zip
   containing exactly the plugin jar + libs; fresh `verifyPlugin` reported both
   target IDEs **Compatible** and dynamically installable.

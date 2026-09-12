@@ -175,7 +175,7 @@
   <section class="panel" id="diagnosisPanel" aria-label="Detective diagnosis" hidden>
     <div class="panel-head">
       <h3><span class="accent">//</span> DETECTIVE · DIAGNOSIS</h3>
-      <button class="iconbtn" id="diagClose" title="Close">✕</button>
+      <button class="iconbtn" id="diagClose" title="Close" aria-label="Close">✕</button>
     </div>
     <div id="diagnosisBody"></div>
   </section>
@@ -186,7 +186,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restoreTitle">
     <div class="modal-head">
       <h3 id="restoreTitle">Review Restore Plan</h3>
-      <button class="iconbtn" data-close-modal>✕</button>
+      <button class="iconbtn" data-close-modal aria-label="Close">✕</button>
     </div>
     <div class="modal-body" id="restoreBody"><p class="muted">Computing plan…</p></div>
     <div class="modal-foot">
@@ -201,7 +201,7 @@
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="diffTitle">
     <div class="modal-head">
       <h3 id="diffTitle">Compare Checkpoints</h3>
-      <button class="iconbtn" data-close-modal>✕</button>
+      <button class="iconbtn" data-close-modal aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
       <div class="diff-pickers">
@@ -228,7 +228,7 @@
       <h3>Command Palette</h3>
       <kbd>esc</kbd>
     </div>
-    <input class="palette-input" id="paletteInput" placeholder="Type a command…" autocomplete="off" spellcheck="false" />
+    <input class="palette-input" id="paletteInput" placeholder="Type a command…" aria-label="Command palette" autocomplete="off" spellcheck="false" />
     <ul class="palette-list" id="paletteList"></ul>
   </div>
 </div>
@@ -295,7 +295,7 @@
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="diagModalTitle">
     <div class="modal-head">
       <h3 id="diagModalTitle">CHRONOVAULT Diagnostics</h3>
-      <button class="iconbtn" data-close-modal>✕</button>
+      <button class="iconbtn" data-close-modal aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
       <dl class="diag-grid" id="diagGrid"></dl>

@@ -27,19 +27,28 @@ for (const f of identical) {
 const canonical = fs.readFileSync(path.join(SRC, "index.html"), "utf-8");
 const webview = fs.readFileSync(path.join(DST, "index.html"), "utf-8");
 
-const expectScripts = canonical
-  .replace(/<script src="\/static\/app\.js"><\/script>/, "")
-  + '<script src="./app.js" nonce="__CV_NONCE__"></script>';
-
-if (!/src="\.\/bridge\.js" nonce="__CV_NONCE__"/.test(webview)) {
-  fail("webview/index.html missing the nonce bridge script tag");
+// Local assets MUST be loaded through asWebviewUri() (displayed as placeholder
+// tokens in the bundle; dashboardPanel.js resolves them at load time).
+for (const [token, label] of [
+  ["__CV_BRIDGE_URI__", "bridge script"],
+  ["__CV_APP_URI__", "app script"],
+  ["__CV_STYLES_URI__", "stylesheet"],
+  ["__CV_ICON_URI__", "icon"],
+]) {
+  if (!webview.includes(token)) fail("webview/index.html missing " + token + " (" + label + ")");
 }
-if (!/src="\.\/app\.js" nonce="__CV_NONCE__"/.test(webview)) {
-  fail("webview/index.html missing the nonce app script tag");
+if (!/src="__CV_BRIDGE_URI__" nonce="__CV_NONCE__"/.test(webview)) {
+  fail("webview/index.html must carry the nonce on the bridge script tag");
+}
+if (!/src="__CV_APP_URI__" nonce="__CV_NONCE__"/.test(webview)) {
+  fail("webview/index.html must carry the nonce on the app script tag");
 }
 if (webview.includes("/static/")) fail("webview/index.html must not reference /static/ paths");
+if (/src="\.\/app\.js"|src="\.\/bridge\.js"|href="\.\/styles\.css"/.test(webview)) {
+  fail("webview/index.html must reference assets via __CV_*_URI__ placeholders, not relative paths");
+}
 if (!/default-src 'none'/.test(webview)) fail("webview/index.html CSP must use default-src 'none'");
-if (/http-equiv="Content-Security-Policy"/.test(canonical.replace(/<meta http-equiv="Content-Security-Policy"[^>]*\/>/, ""))) {
+if (canonical.split('http-equiv="Content-Security-Policy"').length - 1 !== 1) {
   fail("canonical index.html must keep only one CSP meta");
 }
 

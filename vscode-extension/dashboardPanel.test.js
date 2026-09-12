@@ -47,6 +47,28 @@ test("SSE handling closes a prior stream before reopening the same id", () => {
   assert.match(src, /_closeStream\(id\)/, "close old stream before opening a new one");
 });
 
+test("dashboard html loads local assets through webview.asWebviewUri()", () => {
+  // Security requirement: the webview must never guess its own origin with
+  // relative ./ paths — every local asset goes through asWebviewUri() with an
+  // explicit nonce, so the bundle cannot fetch anything outside the extension.
+  const path = require("node:path");
+  const panel = new DashboardPanel({ extensionPath: path.join(__dirname) }, {
+    cliResolver: null,
+    getProjectRoot: () => undefined,
+  });
+  const web = panel._createPanel().webview;
+  const html = panel._dashboardHtml(web);
+  assert.match(html, /vscode-webview:\/\/attachment\/app\.js/, "app.js loaded via asWebviewUri");
+  assert.match(html, /vscode-webview:\/\/attachment\/bridge\.js/, "bridge.js loaded via asWebviewUri");
+  assert.match(html, /vscode-webview:\/\/attachment\/styles\.css/, "styles.css loaded via asWebviewUri");
+  assert.match(html, /vscode-webview:\/\/attachment\/icon\.svg/, "icon loaded via asWebviewUri");
+  assert.doesNotMatch(html, /src="\.\/bridge\.js"|src="\.\/app\.js"|href="\.\/styles\.css"/,
+    "no relative asset paths survive into the panel html");
+  assert.match(html, /script-src 'nonce-[A-Za-z0-9+\/=]+'/, "per-load nonce CSP present");
+  assert.doesNotMatch(html, /__CV_(NONCE|APP|BRIDGE|STYLES|ICON)_URI__/, "no unresolved placeholders remain");
+  panel.dispose();
+});
+
 test("the dashboard message surface never reveals raw shell operations", () => {
   const src = DashboardPanel.prototype._onMessage.toString();
   assert.doesNotMatch(src, /child_process|exec\(|spawn\("sh"/, "webview messages map only to the allowlist proxy");

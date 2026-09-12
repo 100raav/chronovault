@@ -6,8 +6,8 @@
 <title>CHRONOVAULT — Temporal Recovery Console</title>
 <meta name="description" content="Return to the moment your code still worked." />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-__CV_NONCE__'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
-<link rel="icon" type="image/svg+xml" href="./icon.svg" />
-<link rel="stylesheet" href="./styles.css" />
+<link rel="icon" type="image/svg+xml" href="__CV_ICON_URI__" />
+<link rel="stylesheet" href="__CV_STYLES_URI__" />
 </head>
 <body>
 <div class="scanlines" aria-hidden="true"></div>
@@ -175,7 +175,7 @@
   <section class="panel" id="diagnosisPanel" aria-label="Detective diagnosis" hidden>
     <div class="panel-head">
       <h3><span class="accent">//</span> DETECTIVE · DIAGNOSIS</h3>
-      <button class="iconbtn" id="diagClose" title="Close">✕</button>
+      <button class="iconbtn" id="diagClose" title="Close" aria-label="Close">✕</button>
     </div>
     <div id="diagnosisBody"></div>
   </section>
@@ -186,7 +186,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="restoreTitle">
     <div class="modal-head">
       <h3 id="restoreTitle">Review Restore Plan</h3>
-      <button class="iconbtn" data-close-modal>✕</button>
+      <button class="iconbtn" data-close-modal aria-label="Close">✕</button>
     </div>
     <div class="modal-body" id="restoreBody"><p class="muted">Computing plan…</p></div>
     <div class="modal-foot">
@@ -201,7 +201,7 @@
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="diffTitle">
     <div class="modal-head">
       <h3 id="diffTitle">Compare Checkpoints</h3>
-      <button class="iconbtn" data-close-modal>✕</button>
+      <button class="iconbtn" data-close-modal aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
       <div class="diff-pickers">
@@ -228,7 +228,7 @@
       <h3>Command Palette</h3>
       <kbd>esc</kbd>
     </div>
-    <input class="palette-input" id="paletteInput" placeholder="Type a command…" autocomplete="off" spellcheck="false" />
+    <input class="palette-input" id="paletteInput" placeholder="Type a command…" aria-label="Command palette" autocomplete="off" spellcheck="false" />
     <ul class="palette-list" id="paletteList"></ul>
   </div>
 </div>
@@ -295,7 +295,7 @@
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="diagModalTitle">
     <div class="modal-head">
       <h3 id="diagModalTitle">CHRONOVAULT Diagnostics</h3>
-      <button class="iconbtn" data-close-modal>✕</button>
+      <button class="iconbtn" data-close-modal aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
       <dl class="diag-grid" id="diagGrid"></dl>
@@ -307,7 +307,7 @@
   </div>
 </div>
 
-<script src="./bridge.js" nonce="__CV_NONCE__"></script>
-<script src="./app.js" nonce="__CV_NONCE__"></script>
+<script src="__CV_BRIDGE_URI__" nonce="__CV_NONCE__"></script>
+<script src="__CV_APP_URI__" nonce="__CV_NONCE__"></script>
 </body>
 </html>

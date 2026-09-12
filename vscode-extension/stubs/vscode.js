@@ -51,6 +51,14 @@ class FakeWebview {
     return new FakeDisposable();
   }
   postMessage() { return Promise.resolve(); }
+  asWebviewUri(uri) {
+    if (!uri || !uri.fsPath) return { toString: () => "" };
+    const name = String(uri.fsPath).split("/").pop() || "asset";
+    return {
+      fsPath: uri.fsPath,
+      toString: () => "vscode-webview://attachment/" + name,
+    };
+  }
 }
 
 const fakePanel = new FakeWebviewPanel({
@@ -64,7 +72,10 @@ module.exports = {
   ViewColumn: { Active: "Active" },
   ColorThemeKind: { Light: 1, Dark: 2, HighContrast: 3 },
   Uri: {
-    file() { return { fileName: "" }; }
+    file(p) { return { fsPath: p }; },
+    joinPath(base, ...parts) {
+      return { fsPath: (base && base.fsPath || "") + "/" + parts.join("/") };
+    },
   },
   window: {
     activeColorTheme: { kind: 2 },

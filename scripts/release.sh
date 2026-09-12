@@ -99,6 +99,19 @@ TESTS_FAIL=$(rg -o 'failures="[0-9]+"' core/build/test-results/test/*.xml 2>/dev
 node --check cli/src/main/resources/web/app.js && pass "web app.js syntax OK"
 
 # --------------------------------------------------------------------------
+info "5b. VS Code extension tests + lint (node --test, syntax, sync, a11y)"
+if ( cd vscode-extension && npm test >/dev/null 2>&1 ); then
+  pass "VS Code extension tests pass (npm test)"
+else
+  fail "VS Code extension tests FAILED (npm test) — see output above"
+fi
+if ( cd vscode-extension && npm run lint >/dev/null 2>&1 ); then
+  pass "VS Code extension lint passes (syntax + webview sync + a11y)"
+else
+  fail "VS Code extension lint FAILED (npm run lint)"
+fi
+
+# --------------------------------------------------------------------------
 info "6. Package VS Code extension"
 ( cd vscode-extension && npx -y @vscode/vsce package --no-dependencies 2>&1 | tail -1 )
 [[ -f "vscode-extension/chronovault-$VERSION.vsix" ]] && pass "vsix packaged" || fail "vsix missing"

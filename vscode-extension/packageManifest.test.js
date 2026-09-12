@@ -43,14 +43,18 @@ test("webview dashboard is in sync with the canonical CLI dashboard", () => {
   }
 });
 
-test("webview index.html is locked down: CSP none + nonce + bridge", () => {
+test("webview index.html is locked down: CSP none + nonce + asWebviewUri bridge", () => {
   const html = fs.readFileSync(path.join(EXT, "webview", "index.html"), "utf-8");
   assert.match(html, /default-src 'none'/);
   assert.match(html, /script-src 'nonce-__CV_NONCE__'/);
   assert.match(html, /connect-src 'none'/);
   assert.match(html, /base-uri 'none'/);
-  assert.match(html, /<script src="\.\/bridge\.js" nonce="__CV_NONCE__">/);
-  assert.match(html, /<script src="\.\/app\.js" nonce="__CV_NONCE__">/);
+  assert.match(html, /src="__CV_BRIDGE_URI__" nonce="__CV_NONCE__"/);
+  assert.match(html, /src="__CV_APP_URI__" nonce="__CV_NONCE__"/);
+  assert.match(html, /href="__CV_STYLES_URI__"/);
+  assert.match(html, /href="__CV_ICON_URI__"/);
+  assert.doesNotMatch(html, /src="\.\/bridge\.js"|src="\.\/app\.js"|href="\.\/styles\.css"/,
+    "assets must be resolved via webview.asWebviewUri() at load time, never relative paths");
   assert.doesNotMatch(html, /\/static\//, "webview must not reference server-absolute assets");
   assert.doesNotMatch(html, /onclick=/i);
   assert.doesNotMatch(html, /javascript:/i);

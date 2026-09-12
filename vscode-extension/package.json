@@ -119,6 +119,6 @@
     "publish": "vsce publish --no-dependencies --allow-missing-repository",
     "sync-dashboard": "../scripts/sync-dashboard.sh",
     "test": "node resolver.test.js && node dashboardServer.test.js && node packageManifest.test.js && node dashboardPanel.test.js && node commands.test.js",
-    "lint": "node --check extension.js && node --check cliResolver.js && node --check dashboardServer.js && node --check dashboardPanel.js && node --check webview/bridge.js && node --check webview/setup.js && node --check ../cli/src/main/resources/web/app.js && node ../scripts/check-html-sync.js"
+    "lint": "node --check extension.js && node --check cliResolver.js && node --check dashboardServer.js && node --check dashboardPanel.js && node --check webview/bridge.js && node --check webview/setup.js && node --check ../cli/src/main/resources/web/app.js && node ../scripts/check-html-sync.js && node ../scripts/check-dashboard-a11y.js"
   }
 }

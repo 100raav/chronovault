@@ -362,15 +362,22 @@ class DashboardPanel {
     return crypto.randomBytes(16).toString("base64");
   }
 
-  /** Build the dashboard HTML with a per-load nonce and local resource URIs. */
+  /** Build the dashboard HTML with a per-load nonce and asWebviewUri() asset URIs. */
   _dashboardHtml(web) {
     let html = fs.readFileSync(
       path.join(this.context.extensionPath, "webview", "index.html"),
       "utf-8"
     );
     const nonce = this._nonce();
-    html = html.split("__CV_NONCE__").join(nonce);
-    return html;
+    const base = vscode.Uri.file(path.join(this.context.extensionPath, "webview"));
+    const uri = (file) =>
+      web.asWebviewUri(vscode.Uri.joinPath(base, file)).toString();
+    return html
+      .split("__CV_NONCE__").join(nonce)
+      .split("__CV_APP_URI__").join(uri("app.js"))
+      .split("__CV_BRIDGE_URI__").join(uri("bridge.js"))
+      .split("__CV_STYLES_URI__").join(uri("styles.css"))
+      .split("__CV_ICON_URI__").join(uri("icon.svg"));
   }
 
   _setupHtml(opts) {
