@@ -41,15 +41,12 @@ intellijPlatform {
         }
     }
 
-    // Signing credentials are supplied at release time via -Psigning.* properties.
-    // They are intentionally NOT committed. Without them signPlugin is NOT RUN.
     signing {
-        certificateChain = project.hasProperty('signing.certChain') ? project.property('signing.certChain') as String : ''
-        privateKey = project.hasProperty('signing.privateKey') ? project.property('signing.privateKey') as String : ''
-        password = project.hasProperty('signing.password') ? project.property('signing.password') as String : ''
+        certificateChain = file('signing/chain.crt').text
+        privateKey = file('signing/private.pem').text
+        password = providers.environmentVariable('CHRONOVAULT_SIGNING_PASSWORD').getOrElse('')
     }
 
-    // Publishing is manual only; token provided via -Pintellij.token at publish time.
     publishing {
         token = project.hasProperty('intellij.token') ? project.property('intellij.token') as String : ''
         channels = ['stable']
