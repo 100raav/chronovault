@@ -14,8 +14,12 @@ public record VaultConfig(
     boolean telemetryEnabled,
     RetentionPolicy retention,
     Map<String, HealthProfile> healthProfiles,
-    String activeHealthProfile
+    String activeHealthProfile,
+    List<String> allowlist
 ) {
+    public VaultConfig {
+        if (allowlist == null) allowlist = List.of();
+    }
     public enum TrustPolicy {
         ASK, ALLOWLIST_ONLY, ALLOW_ALL
     }
@@ -39,7 +43,11 @@ public record VaultConfig(
                 "build", "target", "dist", "out", "node_modules", ".venv",
                 "__pycache__", ".gradle", ".idea", ".vs", "bin", "obj",
                 ".pytest_cache", ".mypy_cache", ".cargo/target", "coverage",
-                ".coverage", "*.class", "*.pyc", ".chronovault"
+                ".coverage", "*.class", "*.pyc", ".chronovault", ".git",
+                ".svn", ".hg", ".DS_Store", ".env", ".env.*", "*.pem",
+                "*.key", "*.jks", "*.p12", "*.keystore", ".aws", ".ssh",
+                ".npmrc", ".yarnrc", "secrets", "credentials", "*.local.yaml",
+                "id_rsa", "id_ed25519"
             ),
             List.of(".gitignore", ".git"),
             TrustPolicy.ASK,
@@ -47,7 +55,8 @@ public record VaultConfig(
             false,
             new RetentionPolicy(50, 120, true, true),
             Map.of(),
-            "default"
+            "default",
+            List.of()
         );
     }
 

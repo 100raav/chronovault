@@ -1,40 +1,70 @@
 <idea-plugin>
-  <id>dev.chronovault.intellij</id>
+  <id>dev.chronovault</id>
   <name>CHRONOVAULT</name>
-  <vendor>CHRONOVAULT contributors</vendor>
-  <version>1.0.0</version>
+  <vendor email="100raav73@gmail.com" url="https://github.com/100raav/chronovault">Saurav Kumar Bichha</vendor>
   <description><![CDATA[
-    Return to the moment your code still worked. Snapshot, diagnose, and restore
-    verified project states from the IDE via the chronovault command-line tool.
+    Snapshot, verify, and restore the exact moments when your code worked.
+
+    CHRONOVAULT records verified checkpoints of your project — each gated by a real
+    build/test health check — and lets you diagnose what broke and restore the last
+    good state. Current work is always protected first, and if verification fails
+    after a restore, CHRONOVAULT automatically rolls back to your pre-recovery state.
+    Everything is stored locally in your project's <code>.chronovault</code> vault:
+    no cloud, no accounts, no telemetry.
+
+    <h3>Commands</h3>
+    <ul>
+      <li><b>Checkpoint</b> — record a verified snapshot of the current state.</li>
+      <li><b>What broke it?</b> — diagnose the exact change since your last verified checkpoint.</li>
+      <li><b>Restore last good state</b> — return to a verified checkpoint with automatic rollback protection.</li>
+      <li><b>Open dashboard</b> — the temporal web dashboard for comparing and recovering states.</li>
+      <li><b>ChronoVault: Show protection status</b> — current protection overview.</li>
+    </ul>
+
+    <h3>Requirements</h3>
+    The <b>chronovault</b> command-line tool must be available on your PATH. A system-wide
+    install works out of the box; for a custom location set the <code>CHRONOVAULT_CLI</code>
+    environment variable to the full path of the binary.
   ]]></description>
+  <change-notes><![CDATA[
+    <h3>1.0.0</h3>
+    <ul>
+      <li>Verified checkpoints gated by real build/test health checks.</li>
+      <li>What-broke-it diagnosis against the last verified checkpoint.</li>
+      <li>Restore with protective snapshot and automatic rollback on verification failure.</li>
+      <li>Temporal web dashboard with SSE-driven recovery wizard, timeline and state map.</li>
+      <li>Local-first, content-addressable vault with deduplication. No telemetry.</li>
+    </ul>
+  ]]></change-notes>
 
   <depends>com.intellij.modules.platform</depends>
 
   <extensions defaultExtensionNs="com.intellij">
+    <notificationGroup id="CHRONOVAULT" displayType="BALLOON"/>
   </extensions>
 
   <actions>
     <action id="chronovault.checkpoint"
             class="dev.chronovault.intellij.ChronoVaultAction"
-            text="Checkpoint"
+            text="ChronoVault: Create Checkpoint"
             description="Create a verified checkpoint">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="chronovault.diagnose"
             class="dev.chronovault.intellij.ChronoVaultAction"
-            text="What broke it?"
+            text="ChronoVault: What Broke It?"
             description="Diagnose the last state change">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="chronovault.restore"
             class="dev.chronovault.intellij.ChronoVaultAction"
-            text="Restore last good state"
+            text="ChronoVault: Restore Last Good State"
             description="Restore to the last verified checkpoint">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>
     <action id="chronovault.dashboard"
             class="dev.chronovault.intellij.ChronoVaultAction"
-            text="Open dashboard"
+            text="ChronoVault: Open Dashboard"
             description="Open the local CHRONOVAULT web dashboard">
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </action>

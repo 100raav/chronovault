@@ -21,9 +21,7 @@
     "vscode": "^1.84.0"
   },
   "categories": [
-    "Other",
-    "Debuggers",
-    "Testing"
+    "Other"
   ],
   "keywords": [
     "checkpoint",
@@ -32,10 +30,10 @@
     "recovery",
     "snapshot",
     "vault",
-    "time-travel",
     "diagnose",
     "verified",
-    "local-first"
+    "local-first",
+    "backup"
   ],
   "galleryBanner": {
     "color": "#0a0f1e",
@@ -44,7 +42,14 @@
   "icon": "icon.png",
   "readme": "readme.md",
   "changelog": "CHANGELOG.md",
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:chronovault.checkpoint",
+    "onCommand:chronovault.restore",
+    "onCommand:chronovault.diagnose",
+    "onCommand:chronovault.status",
+    "onCommand:chronovault.dashboard"
+  ],
   "main": "./extension.js",
   "contributes": {
     "configuration": {

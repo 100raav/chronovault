@@ -6,7 +6,7 @@
 
 function isPalindrome(word) {
   const clean = String(word).toLowerCase().replace(/[^a-z0-9]/g, "");
-  return clean.length > 0 && clean === clean.split("").join("");
+  return clean.length > 0 && clean === clean.split("").reverse().join("");
 }
 
 function summary(words) {

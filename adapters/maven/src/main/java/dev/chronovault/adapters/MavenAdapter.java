@@ -18,7 +18,7 @@ public final class MavenAdapter implements ProjectAdapter {
     public Optional<DetectedProject> detect(Path projectRoot) {
         Path pom = projectRoot.resolve("pom.xml");
         if (!Files.exists(pom)) return Optional.empty();
-        return Optional.of(DetectedProject.of(ProjectType.JAVA_MAVEN, null, 0.95f)
+        return Optional.of(DetectedProject.of(ProjectType.JAVA_MAVEN, "mvn -q -DskipTests compile", 0.95f)
             .withTestCommand("mvn test"));
     }
 }

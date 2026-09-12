@@ -544,13 +544,17 @@ public final class SqliteMetadataStore implements MetadataStore {
     @Override
     public long logicalStorageBytes() {
         ensureConnection();
+        long logical = 0;
         try (Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery("SELECT COALESCE(SUM(totalLogicalBytes * 1.0), 0) FROM snapshots")) {
-            // placeholder - logical bytes computed from manifests elsewhere
+             ResultSet rs = st.executeQuery("SELECT manifest_json FROM snapshots")) {
+            while (rs.next()) {
+                SnapshotManifest manifest = JsonUtil.fromJson(rs.getString(1), SnapshotManifest.class);
+                logical += manifest.totalLogicalBytes();
+            }
         } catch (SQLException e) {
-            // ignore
+            throw new IllegalStateException("cannot compute logical storage bytes", e);
         }
-        return 0;
+        return logical;
     }
 
     @Override

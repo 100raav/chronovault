@@ -1,7 +1,12 @@
 # Build
 build/
 .gradle/
+.intellijPlatform/
 !gradle/wrapper/gradle-wrapper.jar
+
+# Packages (rebuilt by scripts/release.sh — never commit artifacts)
+*.vsix
+intellij-plugin/build/
 
 # Vaults — never commit recovered state
 **/.chronovault/
@@ -15,9 +20,6 @@ sample-projects/python/.chronovault/
 .vscode/
 out/
 .DS_Store
-
-# IntelliJ plugin build output
-intellij-plugin/build/
 
 # Node
 node_modules/

@@ -10,6 +10,7 @@ import dev.chronovault.core.recovery.RecoveryService;
 import dev.chronovault.core.retention.RetentionService;
 import dev.chronovault.core.snapshot.DefaultSnapshotEngine;
 import dev.chronovault.core.snapshot.SnapshotEngine;
+import dev.chronovault.core.storage.ConfigStore;
 import dev.chronovault.core.util.JsonUtil;
 import dev.chronovault.core.util.Sizes;
 import dev.chronovault.sdk.DetectedProject;
@@ -67,6 +68,7 @@ public final class Main {
                 case "unpin" -> pin(parseArgs(rest), false);
                 case "ui" -> ui(parseArgs(rest));
                 case "detect" -> detect(parseArgs(rest));
+                case "trust" -> trust(parseArgs(rest));
                 case "help", "--help", "-h" -> usage();
                 default -> {
                     err("Unknown command: " + cmd);
@@ -106,6 +108,8 @@ public final class Main {
               chronovault gc [--dry-run]
               chronovault pin ID | unpin ID
               chronovault ui [--port N] [--open]
+              chronovault trust --policy ASK|ALLOWLIST_ONLY|ALLOW_ALL
+              chronovault trust --allow "cmd" | --revoke "cmd" | --list
               chronovault version
             """.formatted(VERSION));
     }
@@ -244,18 +248,30 @@ public final class Main {
     }
 
     private static void reportHealth(HealthResult result, Checkpoint latest) {
-        boolean pass = result.overallPass();
-        out((pass ? green("✓") : red("✗")) + " HEALTH " + (pass ? green("PASS") : red("FAIL")) +
+        HealthStatus overall = result.overallStatus();
+        String icon = switch (overall) {
+            case PASS -> green("✓");
+            case FAIL -> red("✗");
+            case ERROR -> amber("!");
+            case SKIPPED -> dim("–");
+        };
+        String verdict = switch (overall) {
+            case PASS -> green("PASS");
+            case FAIL -> red("FAIL");
+            case ERROR -> amber("ERROR");
+            case SKIPPED -> dim("SKIPPED");
+        };
+        out(icon + " HEALTH " + verdict +
             "  ·  " + result.passedCount() + "/" + result.totalCount() + " checks · " +
             String.format("%.1fs", result.totalDurationMs() / 1000.0));
         for (HealthCheckResult c : result.checks()) {
-            String icon = switch (c.status()) {
+            String checkIcon = switch (c.status()) {
                 case PASS -> green("✓");
                 case FAIL -> red("✗");
                 case ERROR -> amber("!");
                 case SKIPPED -> dim("–");
             };
-            out("  " + icon + " " + c.name() + (c.status() == HealthStatus.FAIL && !c.errorTail().isBlank()
+            out("  " + checkIcon + " " + c.name() + (c.status() == HealthStatus.FAIL && !c.errorTail().isBlank()
                 ? dim(" — " + oneLine(c.errorTail())) : ""));
         }
     }
@@ -594,6 +610,61 @@ public final class Main {
         }
     }
 
+    // ---------------------------------------------------------------- trust
+
+    private static void trust(Map<String, String> args) throws Exception {
+        Path root = projectRoot();
+        VaultConfig config = ConfigStore.load(ChronoVault.defaultVaultRoot(root));
+        VaultConfig.TrustPolicy policy = null;
+        boolean changed = false;
+
+        if (args.containsKey("policy")) {
+            try {
+                policy = VaultConfig.TrustPolicy.valueOf(args.get("policy").toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Unknown policy: " + args.get("policy"));
+            }
+        }
+
+        java.util.List<String> allowlist = new java.util.ArrayList<>(config.allowlist());
+        if (args.containsKey("allow")) {
+            String cmd = args.get("allow").trim();
+            if (!allowlist.contains(cmd)) { allowlist.add(cmd); changed = true; }
+            out(green("✓ allowed: ") + cmd);
+        }
+        if (args.containsKey("revoke")) {
+            String cmd = args.get("revoke").trim();
+            if (allowlist.remove(cmd)) { changed = true; }
+            out("revoked: " + cmd);
+        }
+        if (policy != null) changed = true;
+
+        if (changed) {
+            config = new VaultConfig(
+                config.version(), config.projectName(), config.ignorePatterns(), config.ignoreFiles(),
+                policy != null ? policy : config.trustPolicy(), config.symlinkPolicy(),
+                config.telemetryEnabled(), config.retention(),
+                config.healthProfiles(), config.activeHealthProfile(), allowlist);
+            ConfigStore.save(ChronoVault.defaultVaultRoot(root), config);
+        }
+
+        if (args.containsKey("list")) {
+            out(cyan("TRUST POLICY · " + config.projectName()));
+            out("  policy   : " + config.trustPolicy());
+            if (config.allowlist().isEmpty()) {
+                out("  allowlist: (empty — ALLOWLIST_ONLY rejects all commands)");
+            } else {
+                out("  allowlist:");
+                for (String c : config.allowlist()) out("    - " + c);
+            }
+        }
+        if (!args.containsKey("policy") && !args.containsKey("allow")
+            && !args.containsKey("revoke") && !args.containsKey("list")) {
+            out("Usage: chronovault trust --policy ASK|ALLOWLIST_ONLY|ALLOW_ALL");
+            out("       chronovault trust --allow \"cmd\" | --revoke \"cmd\" | --list");
+        }
+    }
+
     // ---------------------------------------------------------------- ui
 
     private static void ui(Map<String, String> args) throws Exception {
@@ -606,12 +677,29 @@ public final class Main {
             out(cyan("CHRONOVAULT UI") + " → http://localhost:" + port);
             out("  Ctrl+C to stop. (--open to auto-open browser)");
             if (open) {
-                try {
-                    Runtime.getRuntime().exec(new String[]{"open", "http://localhost:" + port});
-                } catch (Exception ignored) {}
+                launchBrowser("http://localhost:" + port);
             }
             Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
             Thread.currentThread().join();
+        }
+    }
+
+    /** Opens the given URL in the platform default browser (no-op and warnings printed on failure). */
+    private static void launchBrowser(String url) {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        String[] cmd;
+        if (os.contains("mac")) {
+            cmd = new String[]{"open", url};
+        } else if (os.contains("win")) {
+            cmd = new String[]{"cmd", "/c", "start", "", url};
+        } else {
+            cmd = new String[]{"xdg-open", url};
+        }
+        try {
+            new ProcessBuilder(cmd).inheritIO().start();
+        } catch (Exception e) {
+            err(yellow("  Could not open a browser automatically: " + e.getMessage()));
+            err(yellow("  Open ") + url + yellow(" manually."));
         }
     }
 
@@ -678,6 +766,7 @@ public final class Main {
     private static String cyan(String s) { return "\u001b[38;5;80m" + s + "\u001b[0m"; }
     private static String violet(String s) { return "\u001b[38;5;141m" + s + "\u001b[0m"; }
     private static String dim(String s) { return "\u001b[38;5;244m" + s + "\u001b[0m"; }
+    private static String yellow(String s) { return "\u001b[38;5;221m" + s + "\u001b[0m"; }
     private static String async(String s) { return dim("⟐ ") + s; }
 
     private static void out(String s) { System.out.println(s); }

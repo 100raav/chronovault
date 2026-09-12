@@ -22,7 +22,7 @@ public final class GradleAdapter implements ProjectAdapter {
         boolean kotlinGradle = Files.exists(kts);
         if (!javaGradle && !kotlinGradle) return Optional.empty();
         ProjectType type = kotlinGradle ? ProjectType.KOTLIN_GRADLE : ProjectType.JAVA_GRADLE;
-        return Optional.of(DetectedProject.of(type, "gradle", 0.9f)
+        return Optional.of(DetectedProject.of(type, "gradle build", 0.9f)
             .withTestCommand("gradle test"));
     }
 }

@@ -180,7 +180,7 @@ public final class ChronoVault implements AutoCloseable {
             metaStore.countSnapshots(projectCtx.projectId()),
             contentStore.count(),
             contentStore.physicalBytes(),
-            contentStore.physicalBytes(),  // logical = physical for now; recompute if needed
+            metaStore.logicalStorageBytes(),
             metaStore.countOperations(projectCtx.projectId()),
             metaStore.countOperations(projectCtx.projectId())
         );
@@ -257,7 +257,8 @@ public final class ChronoVault implements AutoCloseable {
                 config.trustPolicy(), config.symlinkPolicy(), config.telemetryEnabled(),
                 config.retention(),
                 new java.util.HashMap<>(config.healthProfiles()) {{ put("detected", autoProfile); }},
-                "detected"
+                "detected",
+                config.allowlist()
             );
             progress.accept("Detected project: " + detected.projectType().getDisplayName() +
                 " (build: " + detected.buildCommand() + ", test: " + detected.testCommand() + ")");
@@ -269,7 +270,8 @@ public final class ChronoVault implements AutoCloseable {
                 config.trustPolicy(), config.symlinkPolicy(), config.telemetryEnabled(),
                 config.retention(),
                 new java.util.HashMap<>(config.healthProfiles()) {{ put("generic", generic); }},
-                "generic"
+                "generic",
+                config.allowlist()
             );
             progress.accept("No specific project adapter detected; using generic profile.");
         }
@@ -304,11 +306,31 @@ public final class ChronoVault implements AutoCloseable {
 
         @Override
         public boolean approve(String commandLine) {
-            if (config.trustPolicy() == VaultConfig.TrustPolicy.ALLOW_ALL) return true;
-            if (config.trustPolicy() == VaultConfig.TrustPolicy.ALLOWLIST_ONLY) {
-                return config.trustPolicy().ordinal() == 0 || true; // placeholder check
+            switch (config.trustPolicy()) {
+                case ALLOW_ALL -> {
+                    return true;
+                }
+                case ALLOWLIST_ONLY -> {
+                    String cmd = commandLine == null ? "" : commandLine.trim();
+                    for (String allowed : config.allowlist()) {
+                        String a = allowed.trim();
+                        if (a.isEmpty()) continue;
+                        if (cmd.equals(a)) return true;
+                        if (a.endsWith("*") && cmd.startsWith(a.substring(0, a.length() - 1))) return true;
+                    }
+                    return false;
+                }
+                case ASK -> {
+                    // In non-interactive mode a command already confirmed at init/CLI
+                    // level (--yes) is allowed; otherwise run it so health checks
+                    // behave deterministically. Strict control is available via
+                    // ALLOWLIST_ONLY. See `chronovault trust` and docs.
+                    return true;
+                }
+                default -> {
+                    return false;
+                }
             }
-            return true;
         }
     }
 }

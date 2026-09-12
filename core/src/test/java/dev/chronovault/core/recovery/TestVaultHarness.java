@@ -20,7 +20,8 @@ public final class TestVaultHarness implements AutoCloseable {
         config = new VaultConfig(
             config.version(), config.projectName(), config.ignorePatterns(), config.ignoreFiles(),
             VaultConfig.TrustPolicy.ALLOW_ALL, config.symlinkPolicy(), false,
-            config.retention(), java.util.Map.of("test", profile), "test");
+            config.retention(), java.util.Map.of("test", profile), "test",
+            config.allowlist());
         this.vault = new ChronoVault(root, config, true, List.of());
     }
 

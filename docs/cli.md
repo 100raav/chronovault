@@ -18,6 +18,8 @@ usage:
   chronovault storage
   chronovault gc [--dry-run]
   chronovault pin ID | unpin ID
+  chronovault trust --policy ASK|ALLOWLIST_ONLY|ALLOW_ALL
+  chronovault trust --allow "cmd" | --revoke "cmd" | --list
   chronovault ui [--port N] [--open]
   chronovault version
 ```
@@ -93,6 +95,21 @@ checkpoints and the newest checkpoints are always retained.
 
 ### `pin ID` / `unpin ID`
 Protect a checkpoint (and its snapshot) from garbage collection.
+
+## Trust
+
+### `trust --policy ASK|ALLOWLIST_ONLY|ALLOW_ALL`
+Sets the trust policy applied to every health-check command before it runs:
+
+- `ASK` — default; commands run after the interactive `init` prompt (or `--yes`).
+- `ALLOWLIST_ONLY` — only commands listed in the allowlist may run.
+- `ALLOW_ALL` — every command runs unguarded.
+
+### `trust --allow "cmd"` / `--revoke "cmd"` / `--list`
+Adds/removes an exact command line (e.g. `mvn test`) from the allowlist, or prints it.
+Allowlist entries support a trailing `*` prefix wildcard (e.g. `python*`).
+
+Persisted in `.chronovault/config.json`. See [configuration.md](CONFIGURATION.md).
 
 ## Web dashboard
 

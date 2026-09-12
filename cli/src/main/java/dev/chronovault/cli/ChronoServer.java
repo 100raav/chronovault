@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import dev.chronovault.core.application.ChronoVault;
 import dev.chronovault.core.domain.*;
 import dev.chronovault.core.protocol.EventBus;
+import dev.chronovault.core.recovery.RecoveryService;
 import dev.chronovault.core.util.JsonUtil;
 
 import java.io.IOException;
@@ -43,7 +44,7 @@ public final class ChronoServer {
     }
 
     public void start() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(port), 0);
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/", this::handle);
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.start();
@@ -58,6 +59,18 @@ public final class ChronoServer {
                 } catch (Exception ignored) {}
             }
         }, SSE_HEARTBEAT_SECONDS, SSE_HEARTBEAT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /** Restricts cross-origin access to loopback origins. */
+    private void cors(HttpExchange exchange) {
+        String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin != null && (origin.startsWith("http://localhost:")
+                || origin.startsWith("http://127.0.0.1:")
+                || origin.startsWith("http://[::1]:"))) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+        }
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        exchange.getResponseHeaders().set("Cache-Control", "no-store");
     }
 
     public void stop() {
@@ -298,11 +311,17 @@ public final class ChronoServer {
                 (s, m) -> pub.accept(new OperationUpdate(opId, s, -1, m, java.time.Instant.now()));
             try {
                 Object result = task.apply(stageProgress);
-                pub.accept(new OperationUpdate(opId, OperationStage.COMPLETED, 100, "done", java.time.Instant.now()));
                 Map<String, Object> done = new LinkedHashMap<>();
                 done.put("operationId", opId.value());
-                done.put("status", "COMPLETED");
                 done.put("result", result);
+                if (result instanceof RecoveryService.RecoveryOutcome outcome) {
+                    // RecoveryService already published the terminal stage; mirror it in
+                    // the result so the wizard never sees a false success.
+                    done.put("status", outcome.finalStage().name());
+                } else {
+                    pub.accept(new OperationUpdate(opId, OperationStage.COMPLETED, 100, "done", java.time.Instant.now()));
+                    done.put("status", "COMPLETED");
+                }
                 pub.accept(new OperationUpdate(opId, OperationStage.UNKNOWN, 100,
                     JsonUtil.toJson(done), java.time.Instant.now()));
             } catch (Exception e) {
@@ -319,7 +338,7 @@ public final class ChronoServer {
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
         exchange.getResponseHeaders().set("Cache-Control", "no-cache");
         exchange.getResponseHeaders().set("Connection", "keep-alive");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        cors(exchange);
         try {
             exchange.sendResponseHeaders(200, 0);
         } catch (IOException e) {
@@ -373,7 +392,7 @@ public final class ChronoServer {
     private void json(HttpExchange exchange, Object body) throws IOException {
         byte[] bytes = JsonUtil.toJson(body).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        cors(exchange);
         exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
@@ -383,7 +402,7 @@ public final class ChronoServer {
     private void error(HttpExchange exchange, int code, String message) throws IOException {
         byte[] bytes = JsonUtil.toJson(Map.of("error", message)).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        cors(exchange);
         exchange.sendResponseHeaders(code, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);

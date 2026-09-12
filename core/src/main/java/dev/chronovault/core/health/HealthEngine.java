@@ -30,6 +30,12 @@ public final class HealthEngine {
         List<HealthCheckResult> results = new ArrayList<>();
         boolean overAllPass = true;
 
+        if (profile.checks().isEmpty()) {
+            Instant finishedAt = Instant.now();
+            return new HealthResult(false, HealthStatus.ERROR, List.of(),
+                startedAt, finishedAt, finishedAt.toEpochMilli() - startedAt.toEpochMilli());
+        }
+
         for (HealthProfile.HealthCheckDefinition check : profile.checks()) {
             String cmdLine = String.join(" ", check.command());
             if (!approver.approve(cmdLine)) {

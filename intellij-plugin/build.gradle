@@ -1,5 +1,5 @@
 plugins {
-    id 'org.jetbrains.intellij' version '1.17.3'
+    id 'org.jetbrains.intellij.platform' version '2.18.1'
     id 'java'
 }
 
@@ -8,6 +8,9 @@ version = '1.0.0'
 
 repositories {
     mavenCentral()
+    intellijPlatform {
+        defaultRepositories()
+    }
 }
 
 java {
@@ -16,17 +19,39 @@ java {
     }
 }
 
-intellij {
-    version = '2023.2.5'
-    type = 'IC'
-    plugins = []
+dependencies {
+    intellijPlatform {
+        intellijIdeaCommunity '2024.3.1'
+    }
 }
 
-patchPluginXml {
-    sinceBuild = '232'
-    untilBuild = '243.*'
-}
+intellijPlatform {
+    pluginConfiguration {
+        version = '1.0.0'
+        ideaVersion {
+            sinceBuild = '232'
+            untilBuild = '251.*'
+        }
+    }
 
-runIde {
-    jvmArgs '-Dfile.encoding=UTF-8'
+    pluginVerification {
+        ides {
+            create('IC', '2023.2.5')
+            create('IC', '2024.3.1')
+        }
+    }
+
+    // Signing credentials are supplied at release time via -Psigning.* properties.
+    // They are intentionally NOT committed. Without them signPlugin is NOT RUN.
+    signing {
+        certificateChain = project.hasProperty('signing.certChain') ? project.property('signing.certChain') as String : ''
+        privateKey = project.hasProperty('signing.privateKey') ? project.property('signing.privateKey') as String : ''
+        password = project.hasProperty('signing.password') ? project.property('signing.password') as String : ''
+    }
+
+    // Publishing is manual only; token provided via -Pintellij.token at publish time.
+    publishing {
+        token = project.hasProperty('intellij.token') ? project.property('intellij.token') as String : ''
+        channels = ['stable']
+    }
 }

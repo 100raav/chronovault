@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-EULA-blue.svg)](EULA.md)
 [![Java](https://img.shields.io/badge/java-21+-orange.svg)](https://adoptium.net)
-[![Tests](https://img.shields.io/badge/tests-37%2F37-green.svg)](docs/DEVELOPMENT.md)
+[![Tests](https://img.shields.io/badge/tests-48%2F48-green.svg)](docs/DEVELOPMENT.md)
 [![Build](https://img.shields.io/badge/build-Gradle%208.14-blueviolet.svg)](build.gradle)
 [![IDE](https://img.shields.io/badge/IDE-VS%20Code%20%2B%20IntelliJ-2ea44f.svg)](docs/PUBLISHING.md)
 
@@ -45,8 +45,8 @@ a single file.
 - **Verified checkpoints** — snapshots are trusted only when real build/test checks pass.
 - **Automatic rollback** — every recovery is protected and reversible; the recovery
   journal makes it crash-safe.
-- **What-broke-it diagnosis** — deterministic evidence: failing check, changed files,
-  likely culprit.
+- **What-broke-it diagnosis** — evidence-based: failing check, changed files, likely
+  culprit.
 - **Deduplicated storage** — SHA-256 content addressing + gzip-compressed objects in a
   pool `.chronovault` directory. No cloud, no servers.
 - **9 project adapters** — Maven, Gradle, Node, Python, Rust, Go, .NET, C/C++, Generic.
@@ -141,7 +141,7 @@ Both are thin wrappers over the CLI; full instructions in
 ## Building from source
 
 ```bash
-./gradlew build             # compile everything + run all 37 core tests
+./gradlew build             # compile everything + run all 48 core tests
 ./gradlew :cli:installDist  # ready-to-run CLI in cli/build/install/chronovault/bin
 ```
 

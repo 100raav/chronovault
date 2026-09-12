@@ -3,6 +3,8 @@ package dev.chronovault.core.util;
 import dev.chronovault.core.ChronoException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
 public final class PathSafety {
@@ -49,12 +51,48 @@ public final class PathSafety {
 
     /** Ensure a directory exists and is within root; detects symlink escape during creation. */
     public static void validateDirectory(Path dir, Path root) throws IOException {
+        validateWritePath(dir, root);
+        Files.createDirectories(dir.toAbsolutePath().normalize());
+    }
+
+    /**
+     * Verifies that writing through {@code target} cannot escape {@code root} via a
+     * symlinked ancestor. The lexical check is not enough: a symlink placed inside the
+     * project (e.g. {@code root/link -> /elsewhere}) would otherwise let materialization
+     * call {@code Files.createDirectories(parent)} and write files outside the project.
+     * Every existing ancestor of the target is resolved to its real path, and any escape
+     * raises {@link ChronoException.UnsafePathException} before a single byte is written.
+     */
+    public static void validateWritePath(Path target, Path root) throws IOException {
+        Path abs = target.toAbsolutePath().normalize();
         Path canonicalRoot = root.toAbsolutePath().normalize();
-        Path canonicalDir = dir.toAbsolutePath().normalize();
-        if (!canonicalDir.startsWith(canonicalRoot)) {
-            throw new ChronoException.UnsafePathException("Path escapes project: " + dir);
+        if (!abs.startsWith(canonicalRoot)) {
+            throw new ChronoException.UnsafePathException("Path escapes project: " + target);
         }
-        Files.createDirectories(canonicalDir);
+        Path realRoot;
+        try {
+            realRoot = canonicalRoot.toRealPath();
+        } catch (NoSuchFileException e) {
+            realRoot = canonicalRoot;
+        }
+        Path parent = abs.getParent();
+        if (parent == null) return;
+        Path cur = canonicalRoot;
+        for (Path component : canonicalRoot.relativize(parent)) {
+            if (component.toString().isEmpty() || component.toString().equals(".")) continue;
+            cur = cur.resolve(component.toString());
+            if (!Files.exists(cur, LinkOption.NOFOLLOW_LINKS)) break;
+            Path real;
+            try {
+                real = cur.toRealPath();
+            } catch (IOException e) {
+                break;
+            }
+            if (!real.startsWith(realRoot)) {
+                throw new ChronoException.UnsafePathException(
+                    "Path escape through symlink: " + cur + " resolves outside " + root);
+            }
+        }
     }
 
     public static boolean isWithin(Path candidate, Path root) {

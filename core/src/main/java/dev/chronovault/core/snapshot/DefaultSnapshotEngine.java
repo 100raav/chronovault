@@ -42,6 +42,11 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
         List<ManifestEntry> entries = Collections.synchronizedList(new ArrayList<>());
         long[] logicalBytes = {0};
         long[] fileCount = {0};
+        List<String> unreadable = Collections.synchronizedList(new ArrayList<>());
+        Map<String, ManifestEntry> parentByPath = new HashMap<>();
+        if (parent != null) {
+            for (ManifestEntry e : parent.entries()) parentByPath.put(e.path(), e);
+        }
 
         ExecutorService pool = Executors.newFixedThreadPool(MAX_PARALLEL, r -> {
             Thread t = new Thread(r, "cv-hash");
@@ -75,6 +80,18 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
                         return FileVisitResult.CONTINUE;
                     }
                     long size = attrs.size();
+                    ManifestEntry pe = parentByPath.get(rel);
+                    if (pe != null && pe.kind() == ManifestEntry.EntryKind.FILE
+                            && pe.contentHash() != null
+                            && pe.size() == size
+                            && pe.mtimeMillis() == attrs.lastModifiedTime().toMillis()) {
+                        // Unchanged since the parent snapshot — reuse its content reference.
+                        fileCount[0]++;
+                        logicalBytes[0] += size;
+                        entries.add(new ManifestEntry(rel, ManifestEntry.EntryKind.FILE, size,
+                            pe.contentHash(), null, pe.permissions(), pe.mtimeMillis()));
+                        return FileVisitResult.CONTINUE;
+                    }
                     fileCount[0]++;
                     logicalBytes[0] += size;
                     synchronized (futures) {
@@ -97,12 +114,19 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
 
                 @Override
                 public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    unreadable.add(file + " (" + exc.getMessage() + ")");
                     return FileVisitResult.CONTINUE;
                 }
             });
 
             for (Future<?> f : futures) {
                 f.get();
+            }
+
+            if (!unreadable.isEmpty()) {
+                String sample = unreadable.stream().limit(5).collect(java.util.stream.Collectors.joining("; "));
+                throw new IOException("Snapshot failed — " + unreadable.size() +
+                    " file(s) unreadable: " + sample);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -146,6 +170,7 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
             Path target = PathSafety.resolveInside(root, entry.path());
             switch (entry.kind()) {
                 case FILE -> {
+                    PathSafety.validateWritePath(target, root);
                     if (Files.isSymbolicLink(target)) {
                         Files.deleteIfExists(target);
                     }
@@ -156,6 +181,7 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
                     }
                 }
                 case SYMLINK -> {
+                    PathSafety.validateWritePath(target, root);
                     Files.deleteIfExists(target);
                     Files.createSymbolicLink(target, Path.of(entry.symlinkTarget()));
                     restored++;
@@ -165,11 +191,13 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
         }
 
         if (strict) {
+            IgnoreMatcher ignore = new IgnoreMatcher(ctx.config().ignorePatterns());
             List<Path> extra = new ArrayList<>();
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (!dir.equals(root) && dir.getFileName().toString().equals(".chronovault")) {
+                    if (!dir.equals(root) && (dir.getFileName().toString().equals(".chronovault")
+                            || ignore.isIgnored(dir, root))) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     return FileVisitResult.CONTINUE;
@@ -178,7 +206,7 @@ public final class DefaultSnapshotEngine implements SnapshotEngine {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     String rel = toRel(root, file);
-                    if (!rel.isEmpty() && !manifestPaths.contains(rel)) {
+                    if (!rel.isEmpty() && !ignore.isIgnored(file, root) && !manifestPaths.contains(rel)) {
                         extra.add(file);
                     }
                     return FileVisitResult.CONTINUE;

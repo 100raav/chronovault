@@ -157,13 +157,32 @@ public final class RecoveryService {
             }
         } catch (IOException e) {
             progress.accept(OperationStage.FAILED, "Restore failed: " + e.getMessage());
+            String rollbackNote = "";
+            try {
+                SnapshotManifest protective = metadataStore.getSnapshotManifest(
+                    ctx.projectId(), plan.protectiveSnapshotId()).orElse(null);
+                if (protective != null) {
+                    snapshotEngine.restoreSnapshot(ctx, protective, true);
+                    rollbackNote = " Pre-recovery state restored.";
+                }
+            } catch (IOException re) {
+                rollbackNote = " ROLLBACK FAILED — manual intervention required: " + re.getMessage();
+                RecoveryOperation critical = new RecoveryOperation(
+                    opId.value(), ctx.projectId(), OperationStage.FAILED, 50,
+                    "Restore failed; rollback also failed", plan.targetCheckpointId(), plan.protectiveSnapshotId(),
+                    Instant.now(), Instant.now(), null);
+                metadataStore.saveOperationState(critical);
+                journal.append(critical);
+                throw new IOException("Restore failed: " + e.getMessage() + rollbackNote, e);
+            }
             RecoveryOperation failed = new RecoveryOperation(
                 opId.value(), ctx.projectId(), OperationStage.FAILED, 50,
-                "Restore failed", plan.targetCheckpointId(), plan.protectiveSnapshotId(),
+                "Restore failed" + rollbackNote, plan.targetCheckpointId(), plan.protectiveSnapshotId(),
                 Instant.now(), Instant.now(), null);
             metadataStore.saveOperationState(failed);
             journal.append(failed);
-            return new RecoveryOutcome(opId, OperationStage.FAILED, false, e.getMessage(), plan);
+            return new RecoveryOutcome(opId, OperationStage.FAILED, false,
+                e.getMessage() + rollbackNote, plan);
         }
 
         if (!verifyAfterRestore) {

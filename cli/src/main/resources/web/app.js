@@ -24,6 +24,7 @@
   let viewMode = "timeline";
   const camera = { zoom: 1, panX: 0 };
   let wizardOpId = null;
+  let wizardTerminalOp = false;
   const WIZARD_STAGES = ["PLANNED", "PROTECTING", "PROTECTED", "RESTORING", "VERIFYING", "COMMITTING", "COMPLETED"];
   const WIZARD_ERR = ["ROLLING_BACK", "ROLLED_BACK", "FAILED"];
 
@@ -255,13 +256,15 @@
     const cp = selectedCp;
     const ev = cp.evidence;
     const hr = ev && ev.healthResult;
-    const checks = (hr && hr.checks || []).map(c => `<span class="ch-${c.passed ? "ok" : "bad"}">${esc(c.name || "check")}</span>`).join("");
+    const checkList = (hr && hr.checks) || [];
+    const passCount = checkList.filter(c => c.status === "PASS").length;
+    const checks = checkList.map(c => `<span class="${c.status === "PASS" ? "ok" : "bad"}">${esc(c.name || "check")}</span>`).join("");
     const tools = (ev && ev.toolchain && ev.toolchain.tools) ? Object.entries(ev.toolchain.tools).map(([k, v]) =>
       `<div class="insp-row"><span>${esc(k)}</span><span class="insp-chip">${esc(String(v))}</span></div>`).join("") : `<div class="insp-row"><span>none recorded</span><span>—</span></div>`;
     box.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <h4 style="font-size:.8rem;letter-spacing:1px;text-transform:uppercase">Checkpoint ${ID(cp.id).slice(-10)}</h4>
-        <span class="badge badge-${cp.status}">${cp.status}</span>
+        <span class="badge badge-${esc(cp.status)}">${esc(cp.status)}</span>
         ${cp.pinned ? `<span class="pin-icon" title="Pinned">● pinned</span>` : ""}
         ${cp.label ? `<span class="time-chip">${esc(cp.label)}</span>` : ""}
         <span class="time-val">${TS(cp.createdAt)}</span>
@@ -272,7 +275,7 @@
         <div class="insp-box"><h4>Health evidence</h4>
           <div class="insp-row"><span>profile</span><span class="insp-chip">${esc(ev ? ev.healthProfileName || "—" : "—")}</span></div>
           <div class="insp-row"><span>overall</span><span>${(hr && hr.overallPass) ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>'}</span></div>
-          <div class="insp-row"><span>checks</span><span>${hr ? hr.passedCount + "/" + hr.totalCount : "—"}</span></div>
+          <div class="insp-row"><span>checks</span><span>${hr ? passCount + "/" + checkList.length : "—"}</span></div>
           <div class="insp-row"><span>duration</span><span>${hr ? (hr.totalDurationMs > 1000 ? (hr.totalDurationMs / 1000).toFixed(1) + "s" : hr.totalDurationMs + "ms") : "—"}</span></div>
           <div class="health-mini">${checks || ""}</div>
         </div>
@@ -291,9 +294,9 @@
       body.innerHTML = cps.map(cp => `
         <tr data-rowcp="${cp.id.value}" style="cursor:pointer">
           <td class="cp-id" title="${ID(cp.id)}">${ID(cp.id).slice(-10)}</td>
-          <td>${cp.label || "—"}</td>
+          <td>${esc(cp.label || "—")}</td>
           <td class="time-val" title="${TS(cp.createdAt)}">${TIME(cp.createdAt)}</td>
-          <td><span class="badge badge-${cp.status}">${cp.status}</span></td>
+          <td><span class="badge badge-${esc(cp.status)}">${esc(cp.status)}</span></td>
           <td>${cp.gitBranch ? `<span class="git-branch">${esc(cp.gitBranch)}</span>` : "—"}</td>
           <td>
             <span class="cp-actions">
@@ -429,9 +432,13 @@
     const plan = restorePlan;
     const all = (plan.actions || []).map(a => a.path).filter(Boolean);
     const chosen = all.filter(p => selectedPaths.has(p));
+    if (chosen.length === 0) {
+      toast("No files selected — recovery cancelled.", "warn");
+      return;
+    }
     closeModal("restoreModal");
-    const pathsQ = chosen.length && chosen.length < all.length ? "&paths=" + encodeURIComponent(chosen.join(",")) : "";
-    openWizard(plan.targetCheckpointId.value, plan.targetSnapshotId && plan.targetSnapshotId.value ? plan.targetCheckpointId.value : plan.targetCheckpointId.value);
+    const pathsQ = chosen.length < all.length ? "&paths=" + encodeURIComponent(chosen.join(",")) : "";
+    openWizard(plan.targetCheckpointId.value);
     try {
       const res = await api(`/api/recover?to=${restoreTarget}&verify=true${pathsQ}`, { method: "POST" });
       if (res && res.operationId) wizardOpId = res.operationId;
@@ -443,13 +450,15 @@
 
   /* ==================== RECOVERY WIZARD ==================== */
   function buildWizardSteps() {
-    const names = ["PROTECTING", "PROTECTED", "RESTORING", "VERIFYING", "COMMITTING", "COMPLETED"];
-    $("#wizardSteps").innerHTML = names.map((n, i) =>
+    $("#wizardSteps").innerHTML = WIZARD_STAGES.map((n, i) =>
       `<div class="wizard-step" data-ws="${n}"><span class="step-node">${i + 1}</span><span>${n}</span></div>`).join("");
   }
   function openWizard(targetLabel) {
     wizardOpId = null;
-    $("#wizardShell").classList.add("open");
+    wizardTerminalOp = false;
+    const shell = $("#wizardShell");
+    shell.classList.add("open");
+    shell.setAttribute("aria-hidden", "false");
     $("#wizardTarget").textContent = targetLabel || "—";
     $("#wizardResult").hidden = true; $("#wizardResult").className = "wizard-result";
     $("#wizardMsg").textContent = "Protecting current state…";
@@ -457,11 +466,16 @@
     $("#wizardClose").hidden = true;
     $$("#wizardSteps .wizard-step").forEach(s => { s.classList.remove("done", "active", "err"); });
   }
-  function closeWizard() { $("#wizardShell").classList.remove("open"); wizardOpId = null; }
+  function closeWizard() {
+    $("#wizardShell").classList.remove("open");
+    $("#wizardShell").setAttribute("aria-hidden", "true");
+    wizardOpId = null;
+  }
 
   function driveWizard(upd) {
     const stage = (upd.stage || "UNKNOWN").toUpperCase();
     const msg = esc(upd.message || "");
+    if (wizardTerminalOp) return;
     if (stage !== "UNKNOWN" && msg) $("#wizardMsg").textContent = msg;
     const idx = WIZARD_STAGES.indexOf(stage);
     const steps = $$("#wizardSteps .wizard-step");
@@ -481,16 +495,34 @@
       res.textContent = "✓ STATE RESTORED — verification passed";
       res.hidden = false; res.className = "wizard-result ok";
       $("#wizardClose").hidden = false;
+      wizardTerminalOp = true;
       refreshAfterOp();
     } else if (WIZARD_ERR.includes(stage) || stage === "FAILED") {
       const cur = steps.find(s => s.classList.contains("active")) || (steps[steps.length - 2]);
       if (cur) cur.classList.add("err");
       const res = $("#wizardResult");
-      res.textContent = stage === "ROLLED_BACK" ? "✓ ROLLBACK COMPLETE — pre-recovery state restored"
-        : stage === "ROLLING_BACK" ? "↻ ROLLING BACK…" : "✗ RECOVERY " + stage;
-      res.hidden = stage === "ROLLING_BACK";
-      if (stage !== "ROLLING_BACK") { res.className = res.classList.contains("ok") ? res.className : "wizard-result fail"; res.hidden = false; $("#wizardClose").hidden = false; }
-      if (stage === "ROLLED_BACK" || stage === "FAILED") refreshAfterOp();
+      if (stage === "ROLLING_BACK") {
+        res.textContent = "↻ ROLLING BACK…";
+        res.hidden = true;
+      } else if (stage === "ROLLED_BACK") {
+        res.textContent = "✓ ROLLBACK COMPLETE — pre-recovery state restored";
+        res.hidden = false; res.className = "wizard-result fail";
+        $("#wizardClose").hidden = false;
+        wizardTerminalOp = true;
+        refreshAfterOp();
+      } else if (stage === "CANCELLED") {
+        res.textContent = "✗ RECOVERY CANCELLED — nothing was restored";
+        res.hidden = false; res.className = "wizard-result fail";
+        $("#wizardClose").hidden = false;
+        wizardTerminalOp = true;
+        refreshAfterOp();
+      } else {
+        res.textContent = "✗ RECOVERY " + stage;
+        res.hidden = false; res.className = "wizard-result fail";
+        $("#wizardClose").hidden = false;
+        wizardTerminalOp = true;
+        refreshAfterOp();
+      }
     }
   }
 
@@ -586,7 +618,13 @@
     const cv = $("#fx"); const ctxv = cv.getContext("2d");
     if (!ctxv) return;
     let W, H;
-    const resize = () => { W = cv.width = innerWidth; H = cv.height = innerHeight; };
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.floor(innerWidth * dpr);
+      cv.height = Math.floor(innerHeight * dpr);
+      ctxv.setTransform(dpr, 0, 0, dpr, 0, 0);
+      W = innerWidth; H = innerHeight;
+    };
     resize(); addEventListener("resize", resize);
     const N = Math.min(70, Math.floor(innerWidth / 22));
     const parts = Array.from({ length: N }, () => ({
@@ -613,17 +651,19 @@
   }
 
   /* ==================== MODALS / COMMAND PALETTE ==================== */
-  function openModal(id) { $(`#${id}`).classList.add("open"); }
-  function closeModal(id) { $(`#${id}`).classList.remove("open"); }
+  function openModal(id) { const m = $("#" + id); m.classList.add("open"); m.setAttribute("aria-hidden", "false"); }
+  function closeModal(id) { const m = $("#" + id); m.classList.remove("open"); m.setAttribute("aria-hidden", "true"); }
 
   const commands = [
     { name: "Create Checkpoint", key: "C", fn: runCheckpoint },
     { name: "Run Health Checks", key: "V", fn: runHealth },
     { name: "Diagnose Project", key: "D", fn: runDiagnose },
     { name: "Restore Last Verified", key: "R", fn: () => openRestoreModal("") },
-    { name: "Compare Checkpoints (Diff)", key: "F", fn: () => openModal("diffModal") },
+    { name: "Compare Checkpoints (Diff)", fn: () => openModal("diffModal") },
     { name: "Toggle Theme", key: "T", fn: cycleTheme },
   ];
+
+  let filteredCmds = [];
 
   function openPalette() {
     openModal("cmdPalette");
@@ -635,11 +675,11 @@
   function closePalette() { closeModal("cmdPalette"); }
   function renderPalette(q) {
     const list = $("#paletteList");
-    const filtered = commands.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase()));
-    list.innerHTML = filtered.map((c, i) =>
-      `<li data-idx="${i}" class="${i === 0 ? 'sel' : ''}">${c.name}<span class="cmd-key">${c.key}</span></li>`
+    filteredCmds = commands.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+    list.innerHTML = filteredCmds.map((c, i) =>
+      `<li data-idx="${i}" class="${i === 0 ? 'sel' : ''}">${esc(c.name)}${c.key ? `<span class="cmd-key">${c.key}</span>` : ""}</li>`
     ).join("");
-    $$("li", list).forEach(li => li.addEventListener("click", () => { closePalette(); filtered[+li.dataset.idx]?.fn(); }));
+    $$("li", list).forEach(li => li.addEventListener("click", () => { closePalette(); filteredCmds[+li.dataset.idx]?.fn(); }));
   }
 
   /* ==================== THEME ==================== */
@@ -656,10 +696,10 @@
   /* ==================== CAMERA INPUT ==================== */
   function initCamera() {
     const vp = $("#timelineViewport");
+    const rect = () => vp.getBoundingClientRect();
     vp.addEventListener("wheel", e => {
       e.preventDefault();
-      const rect = vp.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
+      const mx = e.clientX - rect().left;
       const before = camera.zoom;
       const after = Math.min(Math.max(before * (e.deltaY < 0 ? 1.16 : 1 / 1.16), 0.15), 8);
       const wx = camera.panX + mx / before;
@@ -668,22 +708,47 @@
       clampCam();
       renderWorld();
     }, { passive: false });
+    const active = new Map();
     let drag = null;
+    let pinch = null;
+    const endPointers = () => {
+      if (active.size < 2) pinch = null;
+      if (active.size === 0) { drag = null; vp.classList.remove("dragging"); }
+    };
     vp.addEventListener("pointerdown", e => {
       if (e.target.closest(".tl-dot")) return;
-      drag = { x: e.clientX, pan: camera.panX, moved: false };
+      active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { vp.setPointerCapture(e.pointerId); } catch {}
+      if (active.size === 2) drag = null;
+      else if (active.size === 1) drag = { x: e.clientX, pan: camera.panX, moved: false };
       vp.classList.add("dragging");
-      vp.setPointerCapture(e.pointerId);
     });
     vp.addEventListener("pointermove", e => {
+      if (active.has(e.pointerId)) active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (active.size >= 2) {
+        const pts = [...active.values()];
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (pinch && pinch.dist > 0) {
+          const before = camera.zoom;
+          const after = Math.min(Math.max(before * (dist / pinch.dist), 0.15), 8);
+          const mx = (pts[0].x + pts[1].x) / 2 - rect().left;
+          const wx = camera.panX + mx / before;
+          camera.zoom = after;
+          camera.panX = wx - mx / after;
+          clampCam();
+          renderWorld();
+        }
+        pinch = { dist };
+        return;
+      }
       if (!drag) return;
       const dx = e.clientX - drag.x;
       camera.panX = drag.pan - dx / camera.zoom;
       drag.moved = drag.moved || Math.abs(dx) > 3;
       clampCam(); renderWorld();
     });
-    vp.addEventListener("pointerup", e => { drag = null; vp.classList.remove("dragging"); });
-    vp.addEventListener("pointercancel", () => { drag = null; vp.classList.remove("dragging"); });
+    vp.addEventListener("pointerup", e => { active.delete(e.pointerId); endPointers(); });
+    vp.addEventListener("pointercancel", e => { active.delete(e.pointerId); endPointers(); });
   }
 
   /* ==================== KEYBOARD ==================== */
@@ -734,8 +799,8 @@
       const sel = $(".sel", $("#paletteList"));
       if (e.key === "ArrowDown" && sel?.nextElementSibling) { sel.classList.remove("sel"); sel.nextElementSibling.classList.add("sel"); }
       if (e.key === "ArrowUp" && sel?.previousElementSibling) { sel.classList.remove("sel"); sel.previousElementSibling.classList.add("sel"); }
-      if (e.key === "Enter" && sel) { closePalette(); commands[+sel.dataset.idx]?.fn(); }
-      if (e.key === "Enter" && !sel && $("li", $("#paletteList"))) { closePalette(); commands[0]?.fn(); }
+      if (e.key === "Enter" && sel) { closePalette(); filteredCmds[+sel.dataset.idx]?.fn(); }
+      if (e.key === "Enter" && !sel && filteredCmds.length) { closePalette(); filteredCmds[0]?.fn(); }
     });
     const zIn = () => { camera.zoom = Math.min(camera.zoom * 1.4, 8); clampCam(); renderWorld(); };
     const zOut = () => { camera.zoom = Math.max(camera.zoom / 1.4, 0.15); clampCam(); renderWorld(); };
