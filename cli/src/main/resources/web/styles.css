@@ -312,7 +312,7 @@ main, header, footer, .toasts, .wizard-backdrop, .modal-backdrop{position:relati
 @media (prefers-reduced-motion: reduce){ #fx{display:none} }
 
 /* ==================================================================
-   CHRONOVAULT 1.0.2 — PREMIUM TEMPORAL VISUALIZATION
+   CHRONOVAULT 1.0.3 — PREMIUM TEMPORAL VISUALIZATION
    Timeline nodes, hover tooltips, health state machine, storage bars,
    purposeful micro-interactions. All motion respects reduced-motion.
    ================================================================== */

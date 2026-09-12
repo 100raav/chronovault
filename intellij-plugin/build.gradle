@@ -53,8 +53,10 @@ version = '1.0.3'
         def chainProp = providers.gradleProperty('signing.certChain')
         def keyProp = providers.gradleProperty('signing.privateKey')
         def passProp = providers.gradleProperty('signing.password').orElse(providers.environmentVariable('CHRONOVAULT_SIGNING_PASSWORD'))
-        certificateChain = chainProp.map { file(it).text }.getOrElse(file('signing/chain.crt').text)
-        privateKey = keyProp.map { file(it).text }.getOrElse(file('signing/private.pem').text)
+        def chainFile = file('signing/chain.crt')
+        def keyFile = file('signing/private.pem')
+        certificateChain = chainProp.map { file(it).text }.getOrElse(chainFile.exists() ? chainFile.text : '')
+        privateKey = keyProp.map { file(it).text }.getOrElse(keyFile.exists() ? keyFile.text : '')
         password = passProp.getOrElse('')
     }
 

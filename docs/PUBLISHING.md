@@ -66,33 +66,47 @@ The IntelliJ build uses the **IntelliJ Platform Gradle Plugin 2.x** (`./gradlew`
 `intellij-plugin/`). Since/until builds are patched by `patchPluginXml` from
 `build.gradle` (`ideaVersion.sinceBuild = 232`, `untilBuild = 251.*`).
 
+### Author signing (optional)
+
+Author signing is **optional** for JetBrains Marketplace: the Marketplace re-signs every
+plugin on upload. An author-signed artifact just avoids a one-time install-time warning
+when the IDE cannot confirm the Marketplace identity. The release gate runs `signPlugin`
+automatically if signing credentials are present and independently verifies the signature
+via the JetBrains `marketplace-zip-signer` CLI.
+
+**Current setup:** a valid self-signed certificate already lives in
+`intellij-plugin/signing/` (gitignored). The release gate signs and verifies the artifact
+using these files. No further action is required unless you want to use your own key.
+
+**To use your own signing key for CI/production:**
+```bash
+# 1. Generate a self-signed cert (one-time, outside the repo)
+openssl genpkey -aes-256-cbc -algorithm RSA -out ~/.cv-signing/private.pem \
+  -pkeyopt rsa_keygen_bits:4096
+openssl rsa -in ~/.cv-signing/private.pem -out ~/.cv-signing/private.pem
+openssl req -key ~/.cv-signing/private.pem -new -x509 -days 365 \
+  -out ~/.cv-signing/chain.crt -subj "/CN=CHRONOVAULT Plugin Signing"
+
+# 2. Run the gate with env vars (never committed)
+CV_SIGNING_CERT_CHAIN="$(<~/.cv-signing/chain.crt)" \
+CV_SIGNING_PRIVATE_KEY="$(<~/.cv-signing/private.pem)" \
+CV_SIGNING_PASSWORD="" \
+./scripts/release.sh
+```
+
+The `build.gradle` also reads from `signing/chain.crt` + `signing/private.pem` by default
+when no env vars are set. Both paths are validated by the gate.
+
+### Publish
+
 1. Register on <https://plugins.jetbrains.com> → **Upload plugin**.
-2. **Signed plugins (2024.2+)**: first generate a local certificate/key:
-   ```bash
-   keytool -genkeypair -alias chronovault -keyalg RSA -keysize 4096 \
-     -keystore chronovault.jks -storepass <pass> -validity 3650
-   keytool -exportcert -alias chronovault -keystore chronovault.jks -file chronovault.cer
-   curl -s -F "certFile=@chronovault.cer" \
-     https://plugins.jetbrains.com/api/certificate/generate
-   ```
-   Publish the returned `.zip` (certificate chain + key) on the Marketplace, download
-   the `.pem`/`.key`, then sign and verify the signature:
-   ```bash
-   cd intellij-plugin
-   ./gradlew signPlugin \
-     -Psigning.certChain="$(<$HOME/.jb/chronovault-cert.pem)" \
-     -Psigning.privateKey="$(<$HOME/.jb/chronovault-key.pem)" \
-     -Psigning.password="$CHRONOVAULT_SIGN_PASS"
-   ./gradlew verifyPluginSignature
-   ```
-   until signing, the artifact is **unsigned** — do not call it Marketplace ready.
-3. **Verify compatibility** (fresh run against the two supported IDE baselines):
+2. **Verify compatibility** (fresh run against the two supported IDE baselines):
    ```bash
    cd intellij-plugin
    ./gradlew verifyPlugin     # verified against IC 2023.2.5 and IC 2024.3.1
    ```
    Reports land in `intellij-plugin/build/reports/pluginVerifier/<IDE>/`.
-4. **Publish** (never committed):
+3. **Publish** (never committed):
    ```bash
    cd intellij-plugin
    ./gradlew publishPlugin -Pintellij.token="$CHRONOVAULT_JB_TOKEN" -Pintellij.channel=stable

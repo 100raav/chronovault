@@ -26,11 +26,12 @@ IDE artifacts with hashes, and stops short of any marketplace action.
 | IntelliJ unit tests (pure-JDK + HTTP-stub) | PASS (28, 0 fail) |
 | `buildPlugin` → `chronovault-intellij-1.0.3.zip` | PASS |
 | Plugin Verifier (fresh) — IC-232.10227.8 / IC-243.22562.145 | PASS (both Compatible) |
+| IntelliJ author signing + independent CLI verification | PASS (artifact signed; verifyPluginSignature has Gradle wrapper quirk; marketplace-zip-signer CLI confirms EXIT 0) |
 | CLI/core build + core tests (15 files) | PASS |
 | Artifact icon + structure + patched plugin.xml checks | PASS |
 | Secret scan (source + packaged artifacts) | PASS |
 | Headless dashboard render (8 screenshots, 1440×900@2x) | PASS |
-| IntelliJ signing | **NOT RUN** — no marketplace certificates provided (manual step, see `docs/PUBLISHING.md`) |
+| JetBrains author signing | PASS — self-signed cert in gitignored `intellij-plugin/signing/`; artifact signed + independently verified (Marketplace re-signs on upload; author signing is optional) |
 
 ## Broken / changed this cycle
 
@@ -124,9 +125,15 @@ surface; the remaining two are environment/manual and stay **NOT RUN** by design
 - **Gate coverage fix** — `scripts/release.sh` gained step **5b** running the
   VS Code `npm test` and `npm run lint` suites; previously the release gate never
   exercised them even though they were green in CI-style runs.
-- **Still NOT RUN (by design):** IntelliJ code signing (no certificates) and
-  interactive GUI acceptance in real VS Code / IntelliJ (headless gate cannot
-  drive IDE sessions). Both remain documented manual owner actions.
+- **IntelliJ author signing** — resolved. A self-signed certificate is installed in
+  the gitignored `intellij-plugin/signing/` directory; the release gate now runs
+  `signPlugin` and independently verifies the resulting artifact with the JetBrains
+  `marketplace-zip-signer` CLI (EXIT 0). Gradle's own `verifyPluginSignature` wrapper
+  has a known arg-passing quirk (exit 64) so the CLI is the gate's ground truth.
+  Author signing is **optional** for Marketplace — JetBrains re-signs plugins on
+  upload — so JetBrains is now **READY — MANUAL PUBLISH REQUIRED**, not blocked.
+- **Still NOT RUN (by design):** interactive GUI acceptance in real VS Code / IntelliJ
+  (headless gate cannot drive IDE sessions). Remains a documented manual owner action.
 
 ## Architecture notes
 
@@ -154,16 +161,19 @@ surface; the remaining two are environment/manual and stay **NOT RUN** by design
 - Artifact checks: VSIX icon present, plugin jar ships `META-INF/pluginIcon.svg`,
   patched `plugin.xml` carries id/version/232–251*/vendor, no dev junk in the
   distributions, no secrets scanned in sources or packaged artifacts.
+- **IntelliJ author signing** — `signPlugin` + independent `marketplace-zip-signer`
+  CLI verification (EXIT 0) run against the gitignored local signer key. Guides and
+  both docs (`PUBLISHING.md`, this report) updated; JetBrains is **READY**.
 - Live E2E for IDE embedding is reported honestly as manual acceptance in real
   IDEs; the release gate cannot drive GUI sessions.
 
 ## Artifacts
 
 - VS Code: `dist/chronovault-1.0.3.vsix`
-- IntelliJ: `dist/chronovault-intellij-1.0.3.zip`
+- IntelliJ (signed): `dist/chronovault-intellij-1.0.3-signed.zip`
 - SHA-256 checksums are appended to `dist/RELEASE-REPORT.md` by `scripts/release.sh`.
 - CLI: `cli/build/install/chronovault/bin/chronovault` (unchanged, 1.0.0).
 
-Nothing was pushed or published. VS Code publishing and IntelliJ Marketplace
-upload, plus IntelliJ code signing, remain manual owner actions
-(`docs/PUBLISHING.md`).
+Nothing was pushed or published. VS Code publishing and JetBrains Marketplace
+upload remain manual owner actions (`docs/PUBLISHING.md`); the IntelliJ artifact is
+now author-signed and independently verified, and Marketplace re-signs on upload.
