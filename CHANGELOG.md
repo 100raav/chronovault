@@ -3,6 +3,47 @@
 All notable changes to CHRONOVAULT are documented in this file. Dates are in
 `YYYY-MM-DD` format.
 
+## [1.0.2] — 2026-09-12
+
+### Added
+
+- **Embedded dashboards in both IDEs — no browser required.** The CHRONOVAULT
+  Timeline, Health map, Storage visualization, recovery wizard and live SSE
+  updates now run *inside* the IDE:
+  - **VS Code** — a new **Dashboard** webview view in the Activity Bar loads the
+    full temporal console through a strict-CSP, postMessage-only bridge
+    (`default-src 'none'`, nonce scripts, no network from the webview). API and
+    SSE traffic is proxied to the local `chronovault ui` server on a free
+    loopback port; the server stops when the view closes.
+  - **IntelliJ** — the CHRONOVAULT tool window now hosts the dashboard in-place
+    via JCEF with a native fallback (action toolbar + Open-in-Browser) when JCEF
+    or the runtime is unavailable. The dashboard server lifecycle is bound to the
+    project.
+- **Premium temporal visualization** (shared dashboard, one source of truth):
+  hover tooltips on every timeline node, recovery markers from history, explicit
+  wheel/gesture zoom + pan + Fit (no cursor auto-zoom), timeline zoom-out state
+  map, and new-checkpoint materialize/reveal animations — all gated behind
+  `prefers-reduced-motion`.
+- **Health state machine** — the dashboard clearly distinguishes
+  Idle / Healthy / Broken / Verifying with an animated ring and status chip.
+- **Restore confirmation (IntelliJ)** — restoring now asks for confirmation
+  before writing the verified checkpoint back; rollback protection is unchanged.
+
+### Changed
+
+- VS Code `ChronoVault: Open dashboard` now focuses the embedded Dashboard view;
+  add `ChronoVault: Open dashboard in browser` for the classic browser path.
+- IntelliJ `Open Dashboard` activates the tool window; new
+  `Open Dashboard in Browser` action keeps the browser path.
+- The dashboard API now exposes `recoveryCount` and hardened
+  `Content-Security-Policy` / `Referrer-Policy` / `X-Frame-Options` /
+  `X-Content-Type-Options` headers on every served asset (browser dashboard).
+
+### Fixed
+
+- An invalid CSS placeholder could affect `.tl-rec` styling in the timeline;
+  removed.
+
 ## [1.0.1] — 2026-09-12
 
 ### Fixed

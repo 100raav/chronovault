@@ -12,6 +12,7 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,15 +36,31 @@ public class ChronoVaultAction extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         Project project = e.getProject();
         String basePath = project == null ? System.getProperty("user.dir") : project.getBasePath();
+        String actionId = e.getActionManager().getId(this);
         String cli = resolveCli();
 
-        String command = switch (e.getActionManager().getId(this)) {
+        if ("chronovault.dashboard".equals(actionId)) {
+            com.intellij.openapi.wm.ToolWindowManager.getInstance(project)
+                .getToolWindow("ChronoVault").activate(null, false);
+            return;
+        }
+
+        String command = switch (actionId) {
             case "chronovault.diagnose" -> "diagnose";
             case "chronovault.health" -> "health";
             case "chronovault.restore" -> "restore --yes";
-            case "chronovault.dashboard" -> "ui --open";
+            case "chronovault.dashboard.browser" -> "ui --open";
             default -> "checkpoint";
         };
+
+        if ("restore --yes".equals(command)) {
+            int answer = Messages.showYesNoDialog(project,
+                "Restore the project to its last verified state?\n\n"
+                    + "Current work is protected first, and CHRONOVAULT rolls back automatically "
+                    + "if verification fails after the restore.",
+                "ChronoVault Restore", Messages.getQuestionIcon());
+            if (answer != Messages.YES) return;
+        }
 
         if (cli == null) {
             String msg = "CHRONOVAULT runtime could not be located. Set the CHRONOVAULT_CLI environment "

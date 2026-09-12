@@ -5,13 +5,18 @@ const path = require("path");
 const vscode = require("vscode");
 const { execFile, spawn } = require("child_process");
 const resolver = require("./cliResolver");
+const { DashboardViewProvider } = require("./dashboardView");
 
 const DEFAULT_TIMEOUT_MS = 30 * 1000;
 const RECOVERY_TIMEOUT_MS = 5 * 60 * 1000;
 const RUNTIME_WARNING_COOLDOWN_MS = 10 * 60 * 1000;
+const CONFIGURE_CLI = "chronovault.configureCli";
+const LOCATE_RUNTIME = "chronovault.locateRuntime";
 
 let activeRuntime = null;
 let lastRuntimeWarningAt = -Infinity;
+let sidebarRef = null;
+let dashboardProvider = null;
 
 function resolveRuntime() {
   if (activeRuntime) return activeRuntime;
@@ -29,6 +34,17 @@ function resolveRuntime() {
 
 function invalidateRuntime() {
   activeRuntime = null;
+}
+
+function refreshChronovaultViews() {
+  if (sidebarRef) sidebarRef.refresh();
+  if (dashboardProvider) dashboardProvider.reload().catch(() => {});
+  refreshStatusInternal();
+}
+
+let statusItemRef = null;
+function refreshStatusInternal() {
+  if (statusItemRef) refreshStatus(statusItemRef);
 }
 
 function activeProjectRoot() {
@@ -109,33 +125,45 @@ function showRuntimeNeeded() {
     "Configure CLI", "Locate Runtime", "Retry"
   ).then(choice => {
     if (choice === "Configure CLI") {
-      vscode.window.showInputBox({ prompt: "Path to the chronovault CLI executable", value: "" })
-        .then(value => {
-          if (!value) return;
-          vscode.workspace.getConfiguration("chronovault")
-            .update("cliPath", value, vscode.ConfigurationTarget.Global)
-            .then(() => invalidateRuntime());
-        });
+      vscode.commands.executeCommand(CONFIGURE_CLI);
     } else if (choice === "Locate Runtime") {
-      vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
-        openLabel: "Select chronovault executable" }).then(selected => {
-        if (!selected || !selected[0]) return;
-        vscode.workspace.getConfiguration("chronovault")
-          .update("cliPath", selected[0].fsPath, vscode.ConfigurationTarget.Global)
-          .then(() => invalidateRuntime());
-      });
+      vscode.commands.executeCommand(LOCATE_RUNTIME);
     } else if (choice === "Retry") {
-      invalidateRuntime();
-      const runtime = resolveRuntime();
-      if (runtime.cli) {
-        vscode.window.showInformationMessage(
-          "CHRONOVAULT runtime ready: " + runtime.detail
-        );
-      } else {
-        showRuntimeNeeded();
-      }
+      vscode.commands.executeCommand("chronovault.checkRuntime");
     }
   });
+}
+
+async function configureCli() {
+  const value = await vscode.window.showInputBox({ prompt: "Path to the chronovault CLI executable", value: "" });
+  if (!value) return;
+  await vscode.workspace.getConfiguration("chronovault")
+    .update("cliPath", value, vscode.ConfigurationTarget.Global);
+  invalidateRuntime();
+  refreshChronovaultViews();
+}
+
+async function locateRuntime() {
+  const selected = await vscode.window.showOpenDialog({
+    canSelectFiles: true, canSelectFolders: false, canSelectMany: false,
+    openLabel: "Select chronovault executable"
+  });
+  if (!selected || !selected[0]) return;
+  await vscode.workspace.getConfiguration("chronovault")
+    .update("cliPath", selected[0].fsPath, vscode.ConfigurationTarget.Global);
+  invalidateRuntime();
+  refreshChronovaultViews();
+}
+
+async function retryRuntime() {
+  invalidateRuntime();
+  const runtime = resolveRuntime();
+  if (runtime.cli) {
+    vscode.window.showInformationMessage("CHRONOVAULT runtime ready: " + runtime.detail);
+  } else {
+    showRuntimeNeeded();
+  }
+  refreshChronovaultViews();
 }
 
 async function run(command, args, options) {
@@ -155,7 +183,7 @@ async function run(command, args, options) {
   return candidate;
 }
 
-function openDashboard() {
+function openDashboardBrowser() {
   const runtime = resolveRuntime();
   const root = activeProjectRoot();
   if (!runtime.cli) {
@@ -240,9 +268,24 @@ function activate(context) {
   statusItem.text = "$(shield) ChronoVault";
   statusItem.tooltip = "Click to check protection status";
   statusItem.show();
+  statusItemRef = statusItem;
 
   const sidebar = new ChronovaultSidebarProvider();
+  sidebarRef = sidebar;
   const treeView = vscode.window.createTreeView("chronovault.sidebar", { treeDataProvider: sidebar });
+
+  dashboardProvider = new DashboardViewProvider(context, {
+    cliResolver: {
+      resolve: async () => {
+        const runtime = resolveRuntime();
+        return runtime && runtime.cli ? runtime.cli : null;
+      }
+    },
+    getProjectRoot: activeProjectRoot
+  });
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider("chronovault.dashboardView", dashboardProvider)
+  );
 
   const handler = (fn) => {
     return async function wrapped() {
@@ -328,8 +371,24 @@ function activate(context) {
     })),
 
     vscode.commands.registerCommand("chronovault.dashboard", handler(async () => {
-      openDashboard();
+      if (dashboardProvider && dashboardProvider.view) {
+        dashboardProvider.view.reveal(vscode.ViewColumn.Active);
+        return;
+      }
+      await vscode.commands.executeCommand("chronovault.dashboardView.focus");
     })),
+
+    vscode.commands.registerCommand("chronovault.dashboardBrowser", handler(async () => {
+      openDashboardBrowser();
+    })),
+
+    vscode.commands.registerCommand("chronovault.refreshDashboard", handler(async () => {
+      if (dashboardProvider) await dashboardProvider.refresh();
+    })),
+
+    vscode.commands.registerCommand(CONFIGURE_CLI, handler(() => configureCli())),
+    vscode.commands.registerCommand(LOCATE_RUNTIME, handler(() => locateRuntime())),
+    vscode.commands.registerCommand("chronovault.retryRuntime", handler(() => retryRuntime())),
 
     treeView
   );
@@ -354,6 +413,11 @@ function stripAnsi(s) {
   return s.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
-function deactivate() {}
+function deactivate() {
+  if (dashboardProvider) dashboardProvider.dispose();
+  dashboardProvider = null;
+  sidebarRef = null;
+  statusItemRef = null;
+}
 
 module.exports = { activate, deactivate };

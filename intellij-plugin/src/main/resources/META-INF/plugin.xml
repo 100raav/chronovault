@@ -17,7 +17,7 @@
       <li><b>Checkpoint</b> — record a verified snapshot of the current state.</li>
       <li><b>What broke it?</b> — diagnose the exact change since your last verified checkpoint.</li>
       <li><b>Restore last good state</b> — return to a verified checkpoint with automatic rollback protection.</li>
-      <li><b>Open dashboard</b> — the temporal web dashboard for comparing and recovering states.</li>
+      <li><b>Dashboard</b> — an embedded CHRONOVAULT timeline, health, and recovery console right in the tool window (opens in your browser in older IDEs).</li>
       <li><b>ChronoVault: Show protection status</b> — current protection overview.</li>
     </ul>
 
@@ -27,6 +27,14 @@
     environment variable to the full path of the binary.
   ]]></description>
   <change-notes><![CDATA[
+    <h3>1.0.2</h3>
+    <ul>
+      <li><b>Embedded dashboard.</b> The CHRONOVAULT tool window now loads the full temporal console in-place via JCEF: timeline with hover tooltips, health state map, storage visualization, recovery wizard and live SSE updates — no browser needed.</li>
+      <li>Restore now asks for confirmation before writing the verified checkpoint back; automatic rollback protection is unchanged.</li>
+      <li>"Open Dashboard" focuses the tool window; "Open Dashboard in Browser" keeps the classic browser experience for quick access or older JCEF-less IDEs.</li>
+      <li>Graceful native fallback (action toolbar + Open-in-Browser) when JCEF or the CLI runtime is unavailable.</li>
+      <li>The dashboard server runs on a free loopback port and is stopped when the project closes.</li>
+    </ul>
     <h3>1.0.1</h3>
     <ul>
       <li>CHRONOVAULT Tool Window for one-click access (checkpoint, health, diagnose, restore, dashboard).</li>
@@ -74,7 +82,11 @@
       <action id="chronovault.dashboard"
               class="dev.chronovault.intellij.ChronoVaultAction"
               text="Open Dashboard"
-              description="Open the local CHRONOVAULT web dashboard"/>
+              description="Open the embedded CHRONOVAULT dashboard in the tool window"/>
+      <action id="chronovault.dashboard.browser"
+              class="dev.chronovault.intellij.ChronoVaultAction"
+              text="Open Dashboard in Browser"
+              description="Open the CHRONOVAULT dashboard in your default web browser"/>
     </group>
     <group id="chronovault.tools">
       <reference ref="chronovault.checkpoint"/>
@@ -82,6 +94,7 @@
       <reference ref="chronovault.diagnose"/>
       <reference ref="chronovault.restore"/>
       <reference ref="chronovault.dashboard"/>
+      <reference ref="chronovault.dashboard.browser"/>
       <add-to-group group-id="ToolsMenu" anchor="last"/>
     </group>
   </actions>

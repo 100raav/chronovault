@@ -31,7 +31,9 @@ No cloud, no accounts, no telemetry.
 - **Selective restore** — choose individual files/folders to recover.
 - **Automatic rollback protection** — a protective snapshot of your current state is
   taken and restored if post-recovery verification fails.
-- **Temporal web dashboard** — zoomable timeline, recovery wizard, diffs, storage stats.
+- **Embedded dashboard** — the full temporal console (timeline with hover tooltips, health
+  map, storage visualization, recovery wizard, live SSE) lives in a **Dashboard** view
+  inside the CHRONOVAULT Activity Bar — no browser required.
 - **Local-first vault** — content-addressable, deduplicated, ~no cloud.
 - **Protection status** — status-bar indicator showing whether your project is protected.
 
@@ -106,9 +108,17 @@ Open the command palette (`Cmd/Ctrl+Shift+P`):
 | `ChronoVault: Restore last good state` | Restore to the last verified checkpoint |
 | `ChronoVault: What broke it?` | Diagnose the last state change |
 | `ChronoVault: Show protection status` | Vault summary |
-| `ChronoVault: Open dashboard` | Open the web dashboard (timeline, restore, diffs) |
+| `ChronoVault: Open dashboard` | Focus the embedded Dashboard view |
+| `ChronoVault: Open dashboard in browser` | Open the dashboard in your browser |
+| `ChronoVault: Refresh dashboard` | Reload the embedded dashboard data |
 
 The status-bar shield shows CHRONOVAULT presence — click it for protection status.
+
+The **Dashboard** view runs a strict-CSP copy of the same dashboard `chronovault ui`
+serves, with a `postMessage` bridge proxying API + SSE traffic to a local server on a free
+loopback port (started on demand, stopped when the view closes). If no project or CLI
+runtime is found it shows an embedded setup page with **Configure CLI / Locate Runtime /
+Retry / Open in Browser**.
 
 ## Settings
 

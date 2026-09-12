@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'dev.chronovault'
-version = '1.0.1'
+version = '1.0.2'
 
 repositories {
     mavenCentral()
@@ -23,11 +23,19 @@ dependencies {
     intellijPlatform {
         intellijIdeaCommunity '2024.3.1'
     }
+    testImplementation 'junit:junit:4.13.2'
+}
+
+test {
+    useJUnit()
+    testLogging {
+        events 'failed', 'skipped'
+    }
 }
 
 intellijPlatform {
     pluginConfiguration {
-        version = '1.0.1'
+        version = '1.0.2'
         ideaVersion {
             sinceBuild = '232'
             untilBuild = '251.*'
@@ -42,9 +50,12 @@ intellijPlatform {
     }
 
     signing {
-        certificateChain = file('signing/chain.crt').text
-        privateKey = file('signing/private.pem').text
-        password = providers.environmentVariable('CHRONOVAULT_SIGNING_PASSWORD').getOrElse('')
+        def chainProp = providers.gradleProperty('signing.certChain')
+        def keyProp = providers.gradleProperty('signing.privateKey')
+        def passProp = providers.gradleProperty('signing.password').orElse(providers.environmentVariable('CHRONOVAULT_SIGNING_PASSWORD'))
+        certificateChain = chainProp.map { file(it).text }.getOrElse(file('signing/chain.crt').text)
+        privateKey = keyProp.map { file(it).text }.getOrElse(file('signing/private.pem').text)
+        password = passProp.getOrElse('')
     }
 
     publishing {

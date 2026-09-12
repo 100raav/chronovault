@@ -10,7 +10,7 @@
 #
 set -euo pipefail
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 # Release policy: IDE integrations (VS Code + IntelliJ) bump on every release.
 # The core product/CLI version only bumps with a core change — it is pinned
 # here so the gate verifies the split instead of demanding identical versions.

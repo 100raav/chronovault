@@ -1,3 +1,128 @@
+# CHRONOVAULT 1.0.2 — EMBEDDED DASHBOARD RELEASE REPORT
+
+Generated: 2026-09-12 — release policy: IDE integrations (VS Code + IntelliJ) bumped to
+1.0.2; the core product/CLI stays 1.0.0 (no core changes in this release). Status values
+use only `PASS`, `FAIL`, `NOT RUN`, `WARN`/`BLOCKED`. Nothing is presumed.
+
+## Environment
+
+| Item | Value |
+| --- | --- |
+| IDE integration version | 1.0.2 |
+| Core product / CLI version | 1.0.0 (unchanged, by design) |
+| Base commit | `65f8472` (pre-release HEAD) |
+| Java | OpenJDK 21 (Temurin) root toolchain; IntelliJ module Java 17 toolchain |
+| IntelliJ plugin wrapper | Gradle 9.7.1, IntelliJ Platform Gradle Plugin 2.18.1 |
+| Node | v25.6.1 |
+| OS | macOS (darwin, arm64) |
+
+## Release objective
+
+No-browser dashboards: run the full CHRONOVAULT temporal console **inside** VS Code and
+IntelliJ using the single shared dashboard already served by `chronovault ui`, wrapped so
+neither IDE requires a browser as the primary path. The CLI/browser dashboard, every action,
+and recovery safety are unchanged.
+
+## Shared dashboard — PASS
+
+- `cli/src/main/resources/web/app.js` rewritten once and shared by all three surfaces
+  (browser, VS Code webview, IntelliJ JCEF). `node --check` clean.
+- Premium temporal visualization: hover tooltips per node, recovery markers from
+  `/api/history`, explicit wheel/pinch zoom + pan + Fit (no cursor auto-zoom), zoom-out
+  state-map, new-checkpoint materialize + reveal animations, health state machine
+  (Idle/Healthy/Broken/Verifying) with animated ring + status chip, storage bar with
+  physical/logical fill, `prefers-reduced-motion` overrides.
+- `index.html`: injected page CSP (self-origins), health chip, storage visualization,
+  tooltip element; footer version 1.0.2.
+- `styles.css`: health-state animations, storage bar, timeline node states/glows, reveal
+  animations, micro-interactions, narrow-layout + reduced-motion media queries.
+- Host integration hook `window.cvBridge` (api/applyThemeLocal/setTheme/refreshAll/
+  setHealthState) lets IDE shells drive the same DOM without touching browser logic.
+
+## CLI server — PASS
+
+- `ChronoServer.java`: `/api/meta` version → 1.0.2; `/api/state` now includes
+  `recoveryCount` + `recoveries` (used by the new recovery markers); every served static
+  asset now emits `Content-Security-Policy`, `Referrer-Policy: no-referrer`,
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
+- `:cli:classes` compiles under the Java 21 toolchain (verified).
+
+## VS Code extension — PASS
+
+- Architecture: the shared dashboard is copied into the extension by
+  `scripts/sync-dashboard.sh` (byte-identical `app.js`/`styles.css`/`icon.svg` + a generated
+  `webview/index.html` with `default-src 'none'` CSP, per-load script nonces, and a
+  `bridge.js` that shims `fetch`/`EventSource` over the webview postMessage bus — no network
+  from the webview, no eval, no Node built-ins reachable).
+- `dashboardServer.js`: free-port picker, `chronovault ui --port N` lifecycle with exit
+  handling, HTTP request proxy, SSE stream client. Loopback only.
+- `dashboardView.js` (WebviewViewProvider): project/runtime gating with embedded setup pages
+  (Configure CLI / Locate Runtime / Retry / Open in Browser), message routing, stream
+  lifecycle bound to view disposal, VS Code theme → dashboard theme mapping, refresh +
+  reload.
+- `extension.js`: registers `chronovault.dashboardView`, `chronovault.dashboardBrowser`,
+  `chronovault.refreshDashboard`, `chronovault.configureCli`, `chronovault.locateRuntime`,
+  `chronovault.retryRuntime`; `Open dashboard` now focuses the embedded view; runtime
+  (re)configuration reloads dashboard + sidebar + status bar; server disposed on shutdown.
+- `package.json` 1.0.2: `dashboardView` webview view, view-title + command-palette menus,
+  activation events for the new view/commands.
+- Tests: `resolver.test.js` 10/10 PASS; `dashboardServer.test.js` 11/11 PASS (port, request,
+  SSE framing, spawn args, readiness, exit handling); `dashboardView.test.js` 16/16 PASS
+  (project/runtime gating, CSP + nonce, api/sse proxying, errors, dispose, reload, setup
+  actions, theme); `packageManifest.test.js` 8/8 PASS (version, sync with canonical dashboard,
+  CSP lock-down, loopback-only, no Node built-ins in webview). Total **45 checks PASS**.
+
+## IntelliJ plugin — PASS
+
+- `DashboardServer.java` (pure JDK): free-port, `ui --port N` spawn, bounded readiness probe
+  of `/api/state`, disposal. `DashboardServerTest` 6/6 PASS.
+- `ChronoVaultToolWindowFactory.java`: starts the dashboard server off the EDT and loads
+  `http://127.0.0.1:<port>/` in a JCEF panel (`JBCefBrowser` via interface load), with a
+  native fallback (action toolbar + Open-in-Browser + status message) when JCEF or the
+  runtime is missing or the server fails. Server lifecycle bound to the project disposable.
+- `ChronoVaultAction.java`: `Open Dashboard` activates the tool window; new
+  `chronovault.dashboard.browser` keeps the browser path; restore now asks for confirmation
+  before executing `restore --yes`.
+- `build.gradle` 1.0.2 (`version` + `pluginConfiguration.version`); `plugin.xml` 1.0.2
+  change-notes + browser action + Tools menu entry; signing block accepts `-Psigning.*` paths
+  with the `signing/` files as fallback.
+- `./gradlew test buildPlugin` PASS — **6/6** new tests;
+  fresh `./gradlew verifyPlugin` PASS — **Compatible** on IC `232.10227.8` and
+  `243.22562.145` (only pre-existing buildSearchableOptions skip + one former deprecation
+  warning, since fixed by switching `new URL(String)` → `URI.create().toURL()`).
+
+## Security — PASS
+
+- Webview CSP `default-src 'none'`, nonce scripts, `connect-src 'none'`; bridge exposes no
+  fs/shell surface; dashboard server bound to loopback and killed on dispose.
+- Web assets now send CSP/referrer/frame/type headers in the browser dashboard too.
+- Release gate secret scan + artifact scan clean (re-run in `scripts/release.sh`).
+
+## Test totals
+
+| Metric | Value |
+| --- | --- |
+| Core/CLI | 48 tests → PASS (unchanged; no core code modified) |
+| VS Code | 45 checks PASS |
+| IntelliJ | 6 tests PASS + fresh verifier Compatible on 2 IDEs |
+
+## Marketplace status
+
+| Marketplace | Status |
+| --- | --- |
+| VS Code | **READY — MANUAL PUBLISH REQUIRED** |
+| JetBrains | **BLOCKED — signing credentials required** (all technical gates pass) |
+| Overall | **RELEASE CANDIDATE — final marketplace action required** |
+
+## Remaining blockers
+
+- IntelliJ in-IDE click-through and signing remain NOT RUN (interactive/credential-bound);
+  the fresh Plugin Verifier + package inspection + `docs/PUBLISHING.md` process stand in.
+- VS Code palette click-through not performed headlessly; CLI E2E + proxied-webview tests
+  stand in.
+
+---
+
 # CHRONOVAULT 1.0.1 — TARGETED FIX REPORT
 
 Generated: 2026-09-12 — release policy: IDE integrations (VS Code + IntelliJ) bumped to

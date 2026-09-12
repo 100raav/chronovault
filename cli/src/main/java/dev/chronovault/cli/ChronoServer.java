@@ -193,7 +193,7 @@ public final class ChronoServer {
     private Object meta() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", "CHRONOVAULT");
-        m.put("version", "1.0.0");
+        m.put("version", "1.0.2");
         m.put("project", vault.projectContext().root().toString());
         m.put("projectName", vault.projectContext().name());
         m.put("tagline", "Return to the moment your code still worked.");
@@ -202,12 +202,15 @@ public final class ChronoServer {
 
     private Map<String, Object> state() throws IOException {
         List<Checkpoint> cps = vault.checkpoints();
+        List<RecoveryOperation> ops = vault.operationHistory();
         Optional<Checkpoint> last = vault.checkpointService().findLastVerified(vault.projectContext());
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("project", vault.projectContext().root().toString());
         m.put("projectName", vault.projectContext().name());
         m.put("checkpointCount", cps.size());
+        m.put("recoveryCount", ops.size());
         m.put("lastVerified", last.orElse(null));
+        m.put("recoveries", ops.size());
         m.put("storage", vault.storageStats());
         m.put("serverTime", java.time.Instant.now().toString());
         return m;
@@ -416,6 +419,7 @@ public final class ChronoServer {
             exchange.close();
             return;
         }
+        securityHeaders(exchange);
         byte[] bytes = in.readAllBytes();
         exchange.getResponseHeaders().set("Content-Type", contentType);
         exchange.sendResponseHeaders(200, bytes.length);
@@ -431,6 +435,7 @@ public final class ChronoServer {
             exchange.close();
             return;
         }
+        securityHeaders(exchange);
         byte[] bytes = in.readAllBytes();
         String ct = switch (name.substring(name.lastIndexOf('.') + 1)) {
             case "css" -> "text/css";
@@ -445,5 +450,15 @@ public final class ChronoServer {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
         }
+    }
+
+    /** Parity security headers for served HTML/JS/CSS (CSP also embedded in the HTML meta). */
+    private void securityHeaders(HttpExchange exchange) {
+        exchange.getResponseHeaders().set("Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+            "connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'");
+        exchange.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+        exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
+        exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
     }
 }

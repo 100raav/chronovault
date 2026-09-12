@@ -2,7 +2,7 @@
   "name": "chronovault",
   "displayName": "CHRONOVAULT",
   "description": "Return to the moment your code still worked. Record verified checkpoints, find what broke, and restore the last good state — with automatic rollback.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "chronovault",
   "author": {
     "name": "Saurav Kumar Bichha",
@@ -45,12 +45,15 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:chronovault.sidebar",
+    "onView:chronovault.dashboardView",
     "onCommand:chronovault.checkpoint",
     "onCommand:chronovault.restore",
     "onCommand:chronovault.diagnose",
     "onCommand:chronovault.status",
     "onCommand:chronovault.health",
-    "onCommand:chronovault.dashboard"
+    "onCommand:chronovault.dashboard",
+    "onCommand:chronovault.dashboardBrowser",
+    "onCommand:chronovault.refreshDashboard"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -65,7 +68,8 @@
     },
     "views": {
       "chronovault": [
-        { "id": "chronovault.sidebar", "name": "CHRONOVAULT" }
+        { "id": "chronovault.sidebar", "name": "CHRONOVAULT" },
+        { "id": "chronovault.dashboardView", "name": "Dashboard", "type": "webview" }
       ]
     },
     "configuration": {
@@ -84,11 +88,17 @@
       { "command": "chronovault.restore", "title": "ChronoVault: Restore last good state", "icon": "$(history)" },
       { "command": "chronovault.diagnose", "title": "ChronoVault: What broke it?", "icon": "$(debug-alt)" },
       { "command": "chronovault.status", "title": "ChronoVault: Show protection status", "icon": "$(shield)" },
-      { "command": "chronovault.dashboard", "title": "ChronoVault: Open dashboard", "icon": "$(globe)" }
+      { "command": "chronovault.dashboard", "title": "ChronoVault: Open dashboard (embedded)", "icon": "$(globe)" },
+      { "command": "chronovault.dashboardBrowser", "title": "ChronoVault: Open dashboard in browser", "icon": "$(browser)" },
+      { "command": "chronovault.refreshDashboard", "title": "ChronoVault: Refresh dashboard", "icon": "$(refresh)" },
+      { "command": "chronovault.configureCli", "title": "ChronoVault: Configure CLI path", "icon": "$(gear)" },
+      { "command": "chronovault.locateRuntime", "title": "ChronoVault: Locate CLI runtime", "icon": "$(search)" },
+      { "command": "chronovault.retryRuntime", "title": "ChronoVault: Retry locating runtime", "icon": "$(sync)" }
     ],
     "menus": {
       "view/title": [
         { "command": "chronovault.dashboard", "when": "view == chronovault.sidebar", "group": "navigation" },
+        { "command": "chronovault.refreshDashboard", "when": "view == chronovault.dashboardView", "group": "navigation" },
         { "command": "chronovault.status", "when": "view == chronovault.sidebar", "group": "navigation" }
       ],
       "commandPalette": [
@@ -97,14 +107,20 @@
         { "command": "chronovault.restore" },
         { "command": "chronovault.diagnose" },
         { "command": "chronovault.status" },
-        { "command": "chronovault.dashboard" }
+        { "command": "chronovault.dashboard" },
+        { "command": "chronovault.dashboardBrowser" },
+        { "command": "chronovault.refreshDashboard" },
+        { "command": "chronovault.configureCli" },
+        { "command": "chronovault.locateRuntime" },
+        { "command": "chronovault.retryRuntime" }
       ]
     }
   },
   "scripts": {
     "package": "vsce package --no-dependencies --allow-missing-repository",
     "publish": "vsce publish --no-dependencies --allow-missing-repository",
-    "test": "node resolver.test.js",
-    "lint": "node --check extension.js && node --check cliResolver.js"
+    "sync-dashboard": "../scripts/sync-dashboard.sh",
+    "test": "node resolver.test.js && node dashboardServer.test.js && node dashboardView.test.js && node packageManifest.test.js",
+    "lint": "node --check extension.js && node --check cliResolver.js && node --check dashboardServer.js && node --check dashboardView.js && node --check webview/app.js && node --check webview/bridge.js && node --check webview/setup.js && node --check ../cli/src/main/resources/web/app.js"
   }
 }
