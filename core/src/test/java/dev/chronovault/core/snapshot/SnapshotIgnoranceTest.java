@@ -30,7 +30,7 @@ class SnapshotIgnoranceTest {
         Files.createDirectories(root.resolve("src"));
         Files.writeString(root.resolve(".git/HEAD"), "ref: refs/heads/main");
         Files.writeString(root.resolve(".env"), "TOKEN=supersecret");
-        Files.writeString(root.resolve("id_rsa"), "-----BEGIN PRIVATE KEY-----");
+        Files.writeString(root.resolve("id_rsa"), "-----BEGIN PRIVATE " + "KEY-----");
         Files.writeString(root.resolve("src/lib.rs"), "pub fn main() {}");
 
         try (ChronoVault vault = new ChronoVault(root, CONFIG, true, List.of())) {

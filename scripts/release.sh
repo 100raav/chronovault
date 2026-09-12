@@ -21,6 +21,9 @@ DIST="$ROOT/dist"
 SREPORT="$DIST/RELEASE-REPORT.md"
 mkdir -p "$DIST"
 
+PRIV_GRP='(RSA|OPENSSH|EC|DSA|PRIVATE)'
+SECRET_RE="AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|-----BEGIN ${PRIV_GRP} KEY-----|xox[baprs]-[A-Za-z0-9-]+"
+
 GATE_OK=1
 TESTS_RUN=0
 TESTS_FAIL=0
@@ -46,8 +49,7 @@ if git diff --quiet && [[ -z "$(git status --porcelain | grep -v '^??')" ]]; the
 else
   notrun "working tree has uncommitted tracked changes — expected mid-release"
 fi
-HARD=$(git grep -n -I -E \
-  'AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|-----BEGIN (RSA|OPENSSH|EC|DSA|PRIVATE) KEY-----|xox[baprs]-[A-Za-z0-9-]+' \
+HARD=$(git grep -n -I -E "$SECRET_RE" \
   -- '*.java' '*.json' '*.gradle' '*.js' '*.xml' '*.sh' '*.md' 2>/dev/null || true)
 if [[ -n "$HARD" ]]; then fail "secret material found:"; echo "$HARD"; else pass "secret scan of tracked source clean"; fi
 
@@ -193,8 +195,8 @@ for pat in '<id>dev.chronovault</id>' '<version>1.0.0</version>' 'since-build="2
 done
 pass "patched plugin.xml validated (id/version/idea-range/vendor)"
 # No secrets packaged in either artifact.
-if unzip -p "$DIST/chronovault-1.0.0.vsix" 2>/dev/null | grep -qiE 'AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|-----BEGIN PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]+' \
-   || unzip -p "$DIST/chronovault-intellij-1.0.0.zip" 2>/dev/null | grep -qiE 'AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|-----BEGIN PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]+'; then
+if unzip -p "$DIST/chronovault-1.0.0.vsix" 2>/dev/null | grep -qiE "$SECRET_RE" \
+   || unzip -p "$DIST/chronovault-intellij-1.0.0.zip" 2>/dev/null | grep -qiE "$SECRET_RE"; then
   fail "secret material packaged inside release artifact"
 else
   pass "release artifacts scan clean (vsix + intellij zip)"
